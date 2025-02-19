@@ -14,9 +14,9 @@ pub struct App {
 }
 
 impl App {
-    fn new() -> App {
+    fn new() -> Self {
         // Try to load existing tasks, or start with empty vec if none exist
-        let tasks = load_tasks().unwrap_or(Vec::new());
+        let tasks = load_tasks().unwrap_or_default();
         // Find the highest task id to continue from
         let next_id = tasks
             .iter()
@@ -24,7 +24,7 @@ impl App {
             .max()
             .unwrap_or(0) + 1;
 
-        App {
+        Self {
             tasks,
             input: String::new(),
             next_id,

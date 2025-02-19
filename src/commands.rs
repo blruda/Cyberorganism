@@ -35,7 +35,7 @@ fn create_task(app: &mut App) {
         
         // Save tasks after creating a new one
         if let Err(e) = save_tasks(&app.tasks) {
-            eprintln!("Failed to save tasks: {}", e);
+            eprintln!("Failed to save tasks: {e}");
         }
     }
 }

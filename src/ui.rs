@@ -1,3 +1,6 @@
+//! Terminal user interface implementation using ratatui. Manages terminal setup,
+//! teardown, and rendering of the task management interface.
+
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
@@ -8,16 +11,28 @@ use std::io;
 
 use crate::App;
 
-// Setup terminal for TUI
+/// Initializes the terminal for TUI operation.
+///
+/// ### Returns
+/// * `Ok(Terminal)` - Configured terminal instance ready for TUI
+/// * `Err(io::Error)` - If terminal setup fails
+///
+/// Sets up:
+/// * Raw mode for immediate character input
+/// * Alternate screen to preserve original terminal content
+/// * Mouse capture for potential future mouse support
 pub fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    Terminal::new(backend).map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+    Terminal::new(CrosstermBackend::new(stdout))
 }
 
-// Restore terminal to normal state
+/// Restores the terminal to its original state.
+///
+/// ### Returns
+/// * `Ok(())` - Terminal successfully restored
+/// * `Err(io::Error)` - If cleanup fails
 pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
     disable_raw_mode()?;
     execute!(
@@ -29,9 +44,16 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
     Ok(())
 }
 
-// Draw the UI
+/// Renders the current application state to the terminal.
+///
+/// ### Arguments
+/// * `frame` - Current frame to render to
+/// * `app` - Application state to render
+///
+/// ### Layout
+/// * Top section: Input area for new tasks
+/// * Bottom section: List of existing tasks
 pub fn draw(frame: &mut Frame, app: &App) {
-    // Create a layout with three sections
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -45,7 +67,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .block(Block::default().borders(Borders::ALL).title("Input"));
     frame.render_widget(input, chunks[0]);
 
-    // Render tasks area with actual tasks
+    // Render tasks
     let tasks_text: Vec<Line> = app
         .tasks
         .iter()

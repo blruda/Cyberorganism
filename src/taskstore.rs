@@ -1,17 +1,17 @@
-use serde::{Deserialize, Serialize};
-use std::io;
-use std::fs;
-use std::path::Path;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::io;
+use std::path::Path;
 
 // Task struct represents a single task in our system
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Task {
-    pub id: u32,                    // Unique identifier for the task
-    pub content: String,            // The actual task content
-    pub created_at: DateTime<Utc>,  // When the task was created
-    pub container: TaskContainer,   // Current container of the task
-    pub status: TaskStatus,         // Current status of the task
+    pub id: u32,                   // Unique identifier for the task
+    pub content: String,           // The actual task content
+    pub created_at: DateTime<Utc>, // When the task was created
+    pub container: TaskContainer,  // Current container of the task
+    pub status: TaskStatus,        // Current status of the task
 }
 
 // TaskContainer represents where the task is located in our system

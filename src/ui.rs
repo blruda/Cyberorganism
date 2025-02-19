@@ -1,13 +1,10 @@
-use std::io;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{
-    prelude::*,
-    widgets::*,
-};
+use ratatui::{prelude::*, widgets::*};
+use std::io;
 
 use crate::App;
 
@@ -38,8 +35,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Input area
-            Constraint::Min(0),     // Task display area
+            Constraint::Length(3), // Input area
+            Constraint::Min(0),    // Task display area
         ])
         .split(frame.size());
 
@@ -55,7 +52,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .map(|task| Line::from(format!("• {}", task.content)))
         .collect();
 
-    let tasks = Paragraph::new(tasks_text)
-        .block(Block::default().borders(Borders::ALL).title("Taskpad"));
+    let tasks =
+        Paragraph::new(tasks_text).block(Block::default().borders(Borders::ALL).title("Taskpad"));
     frame.render_widget(tasks, chunks[1]);
 }

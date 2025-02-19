@@ -1,16 +1,16 @@
+mod commands;
 mod taskstore;
 mod ui;
-mod commands;
 
-use taskstore::{Task, load_tasks};
-use std::io;
 use crossterm::event::{self, Event, KeyCode};
+use std::io;
+use taskstore::{load_tasks, Task};
 
 // App holds the state of our application
 pub struct App {
-    pub tasks: Vec<Task>,          // All tasks in the system
-    pub input: String,             // Current input string
-    pub next_id: u32,             // Counter for generating unique task IDs
+    pub tasks: Vec<Task>, // All tasks in the system
+    pub input: String,    // Current input string
+    pub next_id: u32,     // Counter for generating unique task IDs
 }
 
 impl App {
@@ -18,11 +18,7 @@ impl App {
         // Try to load existing tasks, or start with empty vec if none exist
         let tasks = load_tasks().unwrap_or_default();
         // Find the highest task id to continue from
-        let next_id = tasks
-            .iter()
-            .map(|task| task.id)
-            .max()
-            .unwrap_or(0) + 1;
+        let next_id = tasks.iter().map(|task| task.id).max().unwrap_or(0) + 1;
 
         Self {
             tasks,

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use crossterm::event::KeyCode;
 
-use crate::taskstore::{Task, TaskContainer, TaskStatus, save_tasks};
+use crate::taskstore::{save_tasks, Task, TaskContainer, TaskStatus};
 use crate::App;
 
 pub fn handle_input(app: &mut App, key: KeyCode) {
@@ -32,7 +32,7 @@ fn create_task(app: &mut App) {
         app.tasks.push(task);
         app.next_id += 1;
         app.input.clear();
-        
+
         // Save tasks after creating a new one
         if let Err(e) = save_tasks(&app.tasks) {
             eprintln!("Failed to save tasks: {e}");

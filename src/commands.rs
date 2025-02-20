@@ -29,7 +29,10 @@ pub fn handle_input(app: &mut App, key: KeyCode) {
         }
         _ => {
             // Let tui-input handle all other key events
-            app.input.handle_event(&event::Event::Key(KeyEvent::new(key, KeyModifiers::empty())));
+            app.input.handle_event(&event::Event::Key(KeyEvent::new(
+                key,
+                KeyModifiers::empty(),
+            )));
         }
     }
 }

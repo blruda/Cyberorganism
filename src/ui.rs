@@ -61,21 +61,21 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let temp_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),      // Taskpad
-            Constraint::Length(3),   // Temporary input height to get width (1 line + borders)
+            Constraint::Min(1),    // Taskpad
+            Constraint::Length(3), // Temporary input height to get width (1 line + borders)
         ])
         .split(frame.size());
 
     // Get available width inside borders
     let available_width = temp_chunks[1].width.saturating_sub(2) as usize;
-    
+
     // Split text into fixed-width lines (character wrapping)
     let input_value = app.input.value();
     let cursor_position = app.input.cursor();
-    
+
     // Calculate how many lines we need based on both text and cursor position
     let needed_lines = ((cursor_position.max(input_value.len())) / available_width + 1).max(1);
-    
+
     // Split text into lines, padding with empty lines if needed for cursor
     let mut lines: Vec<Line> = input_value
         .chars()
@@ -83,22 +83,22 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .chunks(available_width)
         .map(|chunk| Line::from(chunk.iter().collect::<String>()))
         .collect();
-    
+
     // Ensure we have enough lines for the cursor
     while lines.len() < needed_lines {
         lines.push(Line::from(""));
     }
 
     // Calculate height needed
-    let total_height = (lines.len() + 2) as u16;  // +2 for borders
+    let total_height = (lines.len() + 2) as u16; // +2 for borders
 
     // Now create final layout with calculated height
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),                  // Taskpad - take remaining space
-            Constraint::Length(1),               // Help message - single line
-            Constraint::Length(total_height),    // Input - exact height needed
+            Constraint::Min(1),               // Taskpad - take remaining space
+            Constraint::Length(1),            // Help message - single line
+            Constraint::Length(total_height), // Input - exact height needed
         ])
         .split(frame.size());
 
@@ -111,41 +111,40 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let tasks_text: Vec<Line> = app
         .tasks
         .iter()
-        .map(|task| Line::from(vec![Span::styled(
-            format!("• {}", task.content),
-            Style::default().fg(Color::Rgb(57, 255, 20))
-        )]))
+        .map(|task| {
+            Line::from(vec![Span::styled(
+                format!("• {}", task.content),
+                Style::default().fg(Color::Rgb(57, 255, 20)),
+            )])
+        })
         .collect();
 
-    let tasks =
-        Paragraph::new(tasks_text)
+    let tasks = Paragraph::new(tasks_text)
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::Rgb(57, 255, 20)))
-        .wrap(Wrap { trim: false });  // Enable character wrapping for tasks too
+        .wrap(Wrap { trim: false }); // Enable character wrapping for tasks too
     frame.render_widget(tasks, chunks[0]);
 
     // Render help message if needed
     if app.show_help {
         let help = Paragraph::new(vec![Line::from(vec![
-            Span::styled(
-                "Press ",
-                Style::default().fg(Color::Rgb(57, 255, 20))
-            ),
+            Span::styled("Press ", Style::default().fg(Color::Rgb(57, 255, 20))),
             Span::styled(
                 "esc",
-                Style::default().fg(Color::Rgb(57, 255, 20)).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Rgb(57, 255, 20))
+                    .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                " or ",
-                Style::default().fg(Color::Rgb(57, 255, 20))
-            ),
+            Span::styled(" or ", Style::default().fg(Color::Rgb(57, 255, 20))),
             Span::styled(
                 "ctrl-c",
-                Style::default().fg(Color::Rgb(57, 255, 20)).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Rgb(57, 255, 20))
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 " to exit cyberorganism",
-                Style::default().fg(Color::Rgb(57, 255, 20))
+                Style::default().fg(Color::Rgb(57, 255, 20)),
             ),
         ])]);
         frame.render_widget(help, chunks[1]);
@@ -159,8 +158,5 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let cursor_y = cursor_position as u16 / available_width as u16;
 
     // Set cursor position accounting for borders
-    frame.set_cursor(
-        chunks[2].x + 1 + cursor_x,
-        chunks[2].y + 1 + cursor_y
-    );
+    frame.set_cursor(chunks[2].x + 1 + cursor_x, chunks[2].y + 1 + cursor_y);
 }

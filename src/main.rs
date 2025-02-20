@@ -54,7 +54,7 @@ fn main() -> io::Result<()> {
     loop {
         // Draw the current state of the app
         terminal.draw(|frame| {
-            ui::draw(frame, &app)
+            ui::draw(frame, &app);
         })?;
 
         // Handle input

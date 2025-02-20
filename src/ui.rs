@@ -1,3 +1,6 @@
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::wildcard_imports)]
+
 //! Terminal user interface implementation using ratatui. Manages terminal setup,
 //! teardown, and rendering of the task management interface.
 

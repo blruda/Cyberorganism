@@ -58,10 +58,11 @@ fn main() -> io::Result<()> {
 
         // Handle input
         if let Event::Key(key) = event::read()? {
-            if key.code == KeyCode::Char('q') {
-                break;
+            match key.code {
+                KeyCode::Esc => break,
+                KeyCode::Char('c') if key.modifiers == event::KeyModifiers::CONTROL => break,
+                _ => commands::handle_input(&mut app, key.code),
             }
-            commands::handle_input(&mut app, key.code);
         }
     }
 

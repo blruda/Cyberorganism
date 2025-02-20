@@ -9,15 +9,14 @@ mod ui;
 use crossterm::event::{self, Event, KeyCode};
 use std::io;
 use taskstore::{load_tasks, Task};
+use tui_input::Input;
 
 /// Central state container for the cyberorganism application.
 pub struct App {
     /// Collection of all tasks in the system
     pub tasks: Vec<Task>,
     /// Current user input being typed
-    pub input: String,
-    /// Position of cursor within input string (in bytes)
-    pub cursor_position: usize,
+    pub input: Input,
     /// Counter for generating the next unique task ID
     pub next_id: u32,
     /// Whether to show the help message
@@ -33,8 +32,7 @@ impl App {
 
         Self {
             tasks,
-            input: String::new(),
-            cursor_position: 0,
+            input: Input::default(),
             next_id,
             show_help: true,
         }

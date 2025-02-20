@@ -63,19 +63,32 @@ pub fn draw(frame: &mut Frame, app: &App) {
         ])
         .split(frame.size());
 
-    // Create input widget to calculate lines
-    let input = Paragraph::new(app.input.as_str())
-        .block(Block::default().borders(Borders::ALL))
-        .style(Style::default().fg(Color::Rgb(57, 255, 20)))
-        .wrap(Wrap { trim: true });
-    
     // Get available width inside borders
-    let available_width = temp_chunks[1].width.saturating_sub(2);
+    let available_width = temp_chunks[1].width.saturating_sub(2) as usize;
     
-    // Calculate needed lines (minimum 1) plus 2 for borders/title
-    let needed_lines = input.line_count(available_width).max(1);
-    let total_height = needed_lines.saturating_add(2) as u16;
+    // Split text into fixed-width lines (character wrapping)
+    let input_value = app.input.value();
+    let cursor_position = app.input.cursor();
     
+    // Calculate how many lines we need based on both text and cursor position
+    let needed_lines = ((cursor_position.max(input_value.len())) / available_width + 1).max(1);
+    
+    // Split text into lines, padding with empty lines if needed for cursor
+    let mut lines: Vec<Line> = input_value
+        .chars()
+        .collect::<Vec<_>>()
+        .chunks(available_width)
+        .map(|chunk| Line::from(chunk.iter().collect::<String>()))
+        .collect();
+    
+    // Ensure we have enough lines for the cursor
+    while lines.len() < needed_lines {
+        lines.push(Line::from(""));
+    }
+
+    // Calculate height needed
+    let total_height = (lines.len() + 2) as u16;  // +2 for borders
+
     // Now create final layout with calculated height
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -85,6 +98,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
             Constraint::Length(total_height),    // Input - exact height needed
         ])
         .split(frame.size());
+
+    // Create input widget with pre-wrapped lines (no word wrapping needed)
+    let input = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Rgb(57, 255, 20)));
 
     // Render tasks
     let tasks_text: Vec<Line> = app
@@ -98,8 +116,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     let tasks =
         Paragraph::new(tasks_text)
-        .block(Block::default().borders(Borders::ALL).title("Taskpad"))
-        .style(Style::default().fg(Color::Rgb(57, 255, 20)));
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Rgb(57, 255, 20)))
+        .wrap(Wrap { trim: false });  // Enable character wrapping for tasks too
     frame.render_widget(tasks, chunks[0]);
 
     // Render help message if needed
@@ -132,10 +151,13 @@ pub fn draw(frame: &mut Frame, app: &App) {
     // Render input
     frame.render_widget(input, chunks[2]);
 
-    // Show cursor at input position
-    // Add 1 to x and y to account for the block border
+    // Calculate cursor position
+    let cursor_x = cursor_position as u16 % available_width as u16;
+    let cursor_y = cursor_position as u16 / available_width as u16;
+
+    // Set cursor position accounting for borders
     frame.set_cursor(
-        chunks[2].x + 1 + app.cursor_position as u16,
-        chunks[2].y + 1
+        chunks[2].x + 1 + cursor_x,
+        chunks[2].y + 1 + cursor_y
     );
 }

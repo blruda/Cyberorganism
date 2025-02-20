@@ -54,18 +54,35 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
 /// * Top section: Input area for new tasks
 /// * Bottom section: List of existing tasks
 pub fn draw(frame: &mut Frame, app: &App) {
-    let chunks = Layout::default()
+    // Create initial layout to get available width
+    let temp_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Input area
-            Constraint::Min(0),    // Task display area
+            Constraint::Min(1),      // Taskpad
+            Constraint::Length(3),   // Temporary input height to get width (1 line + borders)
         ])
         .split(frame.size());
 
-    // Render input box
+    // Create input widget to calculate lines
     let input = Paragraph::new(app.input.as_str())
-        .block(Block::default().borders(Borders::ALL).title("Input"));
-    frame.render_widget(input, chunks[0]);
+        .block(Block::default().borders(Borders::ALL).title("Input"))
+        .wrap(Wrap { trim: true });
+    
+    // Get available width inside borders
+    let available_width = temp_chunks[1].width.saturating_sub(2);
+    
+    // Calculate needed lines (minimum 1) plus 2 for borders/title
+    let needed_lines = input.line_count(available_width).max(1);
+    let total_height = needed_lines.saturating_add(2) as u16;
+    
+    // Now create final layout with calculated height
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(1),                  // Taskpad - take remaining space
+            Constraint::Length(total_height),    // Input - exact height needed
+        ])
+        .split(frame.size());
 
     // Render tasks
     let tasks_text: Vec<Line> = app
@@ -76,5 +93,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     let tasks =
         Paragraph::new(tasks_text).block(Block::default().borders(Borders::ALL).title("Taskpad"));
-    frame.render_widget(tasks, chunks[1]);
+    frame.render_widget(tasks, chunks[0]);
+
+    // Render input
+    frame.render_widget(input, chunks[1]);
 }

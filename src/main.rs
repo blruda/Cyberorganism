@@ -16,6 +16,8 @@ pub struct App {
     pub tasks: Vec<Task>,
     /// Current user input being typed
     pub input: String,
+    /// Position of cursor within input string (in bytes)
+    pub cursor_position: usize,
     /// Counter for generating the next unique task ID
     pub next_id: u32,
 }
@@ -30,6 +32,7 @@ impl App {
         Self {
             tasks,
             input: String::new(),
+            cursor_position: 0,
             next_id,
         }
     }

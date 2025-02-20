@@ -65,7 +65,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Create input widget to calculate lines
     let input = Paragraph::new(app.input.as_str())
-        .block(Block::default().borders(Borders::ALL).title("Input"))
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Rgb(57, 255, 20)))
         .wrap(Wrap { trim: true });
     
     // Get available width inside borders
@@ -88,13 +89,25 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let tasks_text: Vec<Line> = app
         .tasks
         .iter()
-        .map(|task| Line::from(format!("• {}", task.content)))
+        .map(|task| Line::from(vec![Span::styled(
+            format!("• {}", task.content),
+            Style::default().fg(Color::Rgb(57, 255, 20))
+        )]))
         .collect();
 
     let tasks =
-        Paragraph::new(tasks_text).block(Block::default().borders(Borders::ALL).title("Taskpad"));
+        Paragraph::new(tasks_text)
+        .block(Block::default().borders(Borders::ALL).title("Taskpad"))
+        .style(Style::default().fg(Color::Rgb(57, 255, 20)));
     frame.render_widget(tasks, chunks[0]);
 
     // Render input
     frame.render_widget(input, chunks[1]);
+
+    // Show cursor at input position
+    // Add 1 to x and y to account for the block border
+    frame.set_cursor(
+        chunks[1].x + 1 + app.cursor_position as u16,
+        chunks[1].y + 1
+    );
 }

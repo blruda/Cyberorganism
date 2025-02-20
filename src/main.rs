@@ -20,6 +20,8 @@ pub struct App {
     pub cursor_position: usize,
     /// Counter for generating the next unique task ID
     pub next_id: u32,
+    /// Whether to show the help message
+    pub show_help: bool,
 }
 
 impl App {
@@ -34,6 +36,7 @@ impl App {
             input: String::new(),
             cursor_position: 0,
             next_id,
+            show_help: true,
         }
     }
 }

@@ -84,6 +84,8 @@ fn create_task(app: &mut App) {
     app.tasks.push(task);
     app.next_id += 1;
     app.input.clear();
+    app.cursor_position = 0;
+    app.show_help = false;  // Hide help message after first task creation
 
     // Save tasks after creating a new one
     if let Err(e) = save_tasks(&app.tasks) {

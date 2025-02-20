@@ -81,6 +81,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),                  // Taskpad - take remaining space
+            Constraint::Length(1),               // Help message - single line
             Constraint::Length(total_height),    // Input - exact height needed
         ])
         .split(frame.size());
@@ -101,13 +102,40 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(Color::Rgb(57, 255, 20)));
     frame.render_widget(tasks, chunks[0]);
 
+    // Render help message if needed
+    if app.show_help {
+        let help = Paragraph::new(vec![Line::from(vec![
+            Span::styled(
+                "Press ",
+                Style::default().fg(Color::Rgb(57, 255, 20))
+            ),
+            Span::styled(
+                "esc",
+                Style::default().fg(Color::Rgb(57, 255, 20)).add_modifier(Modifier::BOLD)
+            ),
+            Span::styled(
+                " or ",
+                Style::default().fg(Color::Rgb(57, 255, 20))
+            ),
+            Span::styled(
+                "ctrl-c",
+                Style::default().fg(Color::Rgb(57, 255, 20)).add_modifier(Modifier::BOLD)
+            ),
+            Span::styled(
+                " to exit cyberorganism",
+                Style::default().fg(Color::Rgb(57, 255, 20))
+            ),
+        ])]);
+        frame.render_widget(help, chunks[1]);
+    }
+
     // Render input
-    frame.render_widget(input, chunks[1]);
+    frame.render_widget(input, chunks[2]);
 
     // Show cursor at input position
     // Add 1 to x and y to account for the block border
     frame.set_cursor(
-        chunks[1].x + 1 + app.cursor_position as u16,
-        chunks[1].y + 1
+        chunks[2].x + 1 + app.cursor_position as u16,
+        chunks[2].y + 1
     );
 }

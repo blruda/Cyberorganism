@@ -176,13 +176,30 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .split(frame.size());
 
     // Render tasks
+    let tasks_area = chunks[0];
+    let available_width = tasks_area.width.saturating_sub(2) as usize; // Subtract 2 for borders
+
     let tasks_text: Vec<Line> = app
         .tasks
         .iter()
         .enumerate()
         .map(|(idx, task)| {
+            // Calculate space needed for index (e.g., "10. " = 4 chars)
+            let index = format!("{}. ", idx + 1);
+            let index_width = index.len();
+            
+            // Calculate remaining width for content
+            let content_width = available_width.saturating_sub(index_width);
+            
+            // Truncate content if it exceeds available width
+            let content = if task.content.len() > content_width {
+                format!("{}...", &task.content[..content_width.saturating_sub(3)])
+            } else {
+                task.content.clone()
+            };
+
             Line::from(vec![Span::styled(
-                format!("{}. {}", idx + 1, task.content),
+                format!("{}{}", index, content),
                 Style::default().fg(Color::Rgb(57, 255, 20)),
             )])
         })
@@ -191,7 +208,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let tasks = Paragraph::new(tasks_text)
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::Rgb(57, 255, 20)))
-        .wrap(Wrap { trim: false }); // Enable character wrapping for tasks too
+        .wrap(Wrap { trim: false }); // Disable wrapping since we handle it ourselves
     frame.render_widget(tasks, chunks[0]);
 
     // Render activity log if there's a message

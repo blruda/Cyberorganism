@@ -6,11 +6,11 @@ mod commands;
 mod taskstore;
 mod ui;
 
+use crate::ui::{ActivityLog, TaskpadState};
 use crossterm::event::{self, Event, KeyCode};
 use std::io;
 use taskstore::{load_tasks, Task};
 use tui_input::Input;
-use crate::ui::{TaskpadState, ActivityLog};
 
 /// Central state container for the cyberorganism application.
 pub struct App {
@@ -28,8 +28,15 @@ pub struct App {
     pub activity_log: ActivityLog,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     /// Creates a new application instance with default state.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tasks: load_tasks().unwrap_or_default(),

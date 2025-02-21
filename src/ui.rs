@@ -53,9 +53,15 @@ pub struct TaskpadState {
     display_to_id: Vec<u32>,
 }
 
+impl Default for TaskpadState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskpadState {
-    /// Creates a new TaskpadState
-    pub fn new() -> Self {
+    /// Creates a new `TaskpadState`
+    pub const fn new() -> Self {
         Self {
             display_to_id: Vec::new(),
         }
@@ -93,7 +99,7 @@ pub struct ActivityLog {
 
 impl ActivityLog {
     /// Creates a new empty activity log
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             messages: Vec::new(),
         }
@@ -106,7 +112,7 @@ impl ActivityLog {
 
     /// Gets the most recent activity message
     pub fn latest_message(&self) -> Option<&str> {
-        self.messages.first().map(|s| s.as_str())
+        self.messages.first().map(std::string::String::as_str)
     }
 }
 
@@ -157,15 +163,15 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Create constraints vector dynamically based on help message visibility
     let mut constraints = vec![
-        Constraint::Min(1),               // Taskpad - take remaining space
-        Constraint::Length(1),            // Activity log - single line
+        Constraint::Min(1),    // Taskpad - take remaining space
+        Constraint::Length(1), // Activity log - single line
     ];
-    
+
     // Only add help message constraint if it's visible
     if app.show_help {
         constraints.push(Constraint::Length(1)); // Help message - single line
     }
-    
+
     // Add input constraint
     constraints.push(Constraint::Length(total_height)); // Input - exact height needed
 
@@ -187,10 +193,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
             // Calculate space needed for index (e.g., "10. " = 4 chars)
             let index = format!("{}. ", idx + 1);
             let index_width = index.len();
-            
+
             // Calculate remaining width for content
             let content_width = available_width.saturating_sub(index_width);
-            
+
             // Truncate content if it exceeds available width
             let content = if task.content.len() > content_width {
                 format!("{}...", &task.content[..content_width.saturating_sub(3)])
@@ -199,7 +205,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             };
 
             Line::from(vec![Span::styled(
-                format!("{}{}", index, content),
+                format!("{index}{content}"),
                 Style::default().fg(Color::Rgb(57, 255, 20)),
             )])
         })
@@ -213,12 +219,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Render activity log if there's a message
     if let Some(message) = app.activity_log.latest_message() {
-        let activity_log = Paragraph::new(Line::from(vec![
-            Span::styled(
-                message,
-                Style::default().fg(Color::Rgb(57, 255, 20)),
-            )
-        ]));
+        let activity_log = Paragraph::new(Line::from(vec![Span::styled(
+            message,
+            Style::default().fg(Color::Rgb(57, 255, 20)),
+        )]));
         frame.render_widget(activity_log, chunks[1]);
     }
 

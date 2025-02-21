@@ -57,12 +57,13 @@ fn create_task(app: &mut App) {
     };
 
     app.tasks.push(task);
+    app.taskpad_state.update_display_order(&app.tasks);
     app.next_id += 1;
     app.input.reset();
     app.show_help = false;
 
     // Save tasks after creating a new one
     if let Err(e) = save_tasks(&app.tasks) {
-        eprintln!("Failed to save tasks: {e}");
+        eprintln!("Failed to save tasks: {}", e);
     }
 }

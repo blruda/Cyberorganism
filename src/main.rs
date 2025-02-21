@@ -10,6 +10,7 @@ use crossterm::event::{self, Event, KeyCode};
 use std::io;
 use taskstore::{load_tasks, Task};
 use tui_input::Input;
+use crate::ui::TaskpadState;
 
 /// Central state container for the cyberorganism application.
 pub struct App {
@@ -21,20 +22,19 @@ pub struct App {
     pub next_id: u32,
     /// Whether to show the help message
     pub show_help: bool,
+    /// State of the taskpad display
+    pub taskpad_state: TaskpadState,
 }
 
 impl App {
-    fn new() -> Self {
-        // Implementation note: Try to load existing tasks, or start with empty vec if none exist
-        let tasks = load_tasks().unwrap_or_default();
-        // Implementation note: Find the highest task id to continue from
-        let next_id = tasks.iter().map(|task| task.id).max().unwrap_or(0) + 1;
-
+    /// Creates a new application instance with default state.
+    pub fn new() -> Self {
         Self {
-            tasks,
+            tasks: load_tasks().unwrap_or_default(),
             input: Input::default(),
-            next_id,
+            next_id: 1,
             show_help: true,
+            taskpad_state: TaskpadState::new(),
         }
     }
 }

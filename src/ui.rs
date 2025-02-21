@@ -12,7 +12,7 @@ use crossterm::{
 use ratatui::{prelude::*, widgets::*};
 use std::io;
 
-use crate::App;
+use crate::{App, Task};
 
 /// Initializes the terminal for TUI operation.
 ///
@@ -45,6 +45,43 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
     )?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+/// Maintains the display state of tasks in the taskpad
+pub struct TaskpadState {
+    /// Maps 1-based display indices to task IDs
+    display_to_id: Vec<u32>,
+}
+
+impl TaskpadState {
+    /// Creates a new TaskpadState
+    pub fn new() -> Self {
+        Self {
+            display_to_id: Vec::new(),
+        }
+    }
+
+    /// Updates the display order based on the current tasks
+    pub fn update_display_order(&mut self, tasks: &[Task]) {
+        self.display_to_id = tasks.iter().map(|task| task.id).collect();
+    }
+
+    /// Gets a task ID from a 1-based display index
+    pub fn get_task_id(&self, display_index: usize) -> Option<u32> {
+        if display_index == 0 || display_index > self.display_to_id.len() {
+            None
+        } else {
+            self.display_to_id.get(display_index - 1).copied()
+        }
+    }
+
+    /// Gets the display index (1-based) for a task ID
+    pub fn get_display_index(&self, task_id: u32) -> Option<usize> {
+        self.display_to_id
+            .iter()
+            .position(|&id| id == task_id)
+            .map(|i| i + 1)
+    }
 }
 
 /// Renders the current application state to the terminal.
@@ -111,9 +148,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let tasks_text: Vec<Line> = app
         .tasks
         .iter()
-        .map(|task| {
+        .enumerate()
+        .map(|(idx, task)| {
             Line::from(vec![Span::styled(
-                format!("• {}", task.content),
+                format!("{}. {}", idx + 1, task.content),
                 Style::default().fg(Color::Rgb(57, 255, 20)),
             )])
         })

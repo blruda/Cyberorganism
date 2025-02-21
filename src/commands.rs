@@ -48,9 +48,10 @@ pub fn handle_input(app: &mut App, key: KeyCode) {
 /// * Current timestamp
 /// * Default container (Taskpad) and status (Todo)
 fn create_task(app: &mut App) {
+    let content = app.input.value().to_string();
     let task = Task {
         id: app.next_id,
-        content: app.input.value().to_string(),
+        content: content.clone(),
         created_at: Utc::now(),
         container: TaskContainer::Taskpad,
         status: TaskStatus::Todo,
@@ -61,6 +62,15 @@ fn create_task(app: &mut App) {
     app.next_id += 1;
     app.input.reset();
     app.show_help = false;
+
+    // Create truncated message with ellipsis if needed
+    const MAX_LENGTH: usize = 50;
+    let truncated = if content.len() > MAX_LENGTH {
+        format!("{}...", &content[..MAX_LENGTH])
+    } else {
+        content
+    };
+    app.log_activity(format!("Added task: {}", truncated));
 
     // Save tasks after creating a new one
     if let Err(e) = save_tasks(&app.tasks) {

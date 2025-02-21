@@ -84,6 +84,32 @@ impl TaskpadState {
     }
 }
 
+/// Maintains a log of user activities and commands
+#[derive(Default)]
+pub struct ActivityLog {
+    /// List of activity messages, newest first
+    messages: Vec<String>,
+}
+
+impl ActivityLog {
+    /// Creates a new empty activity log
+    pub fn new() -> Self {
+        Self {
+            messages: Vec::new(),
+        }
+    }
+
+    /// Adds a new activity message to the log
+    pub fn add_message(&mut self, message: String) {
+        self.messages.insert(0, message);
+    }
+
+    /// Gets the most recent activity message
+    pub fn latest_message(&self) -> Option<&str> {
+        self.messages.first().map(|s| s.as_str())
+    }
+}
+
 /// Renders the current application state to the terminal.
 ///
 /// ### Arguments
@@ -126,23 +152,28 @@ pub fn draw(frame: &mut Frame, app: &App) {
         lines.push(Line::from(""));
     }
 
-    // Calculate height needed
+    // Calculate height needed for input
     let total_height = (lines.len() + 2) as u16; // +2 for borders
 
-    // Now create final layout with calculated height
+    // Create constraints vector dynamically based on help message visibility
+    let mut constraints = vec![
+        Constraint::Min(1),               // Taskpad - take remaining space
+        Constraint::Length(1),            // Activity log - single line
+    ];
+    
+    // Only add help message constraint if it's visible
+    if app.show_help {
+        constraints.push(Constraint::Length(1)); // Help message - single line
+    }
+    
+    // Add input constraint
+    constraints.push(Constraint::Length(total_height)); // Input - exact height needed
+
+    // Create final layout with calculated height
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),               // Taskpad - take remaining space
-            Constraint::Length(1),            // Help message - single line
-            Constraint::Length(total_height), // Input - exact height needed
-        ])
+        .constraints(constraints)
         .split(frame.size());
-
-    // Create input widget with pre-wrapped lines (no word wrapping needed)
-    let input = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL))
-        .style(Style::default().fg(Color::Rgb(57, 255, 20)));
 
     // Render tasks
     let tasks_text: Vec<Line> = app
@@ -162,6 +193,17 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(Color::Rgb(57, 255, 20)))
         .wrap(Wrap { trim: false }); // Enable character wrapping for tasks too
     frame.render_widget(tasks, chunks[0]);
+
+    // Render activity log if there's a message
+    if let Some(message) = app.activity_log.latest_message() {
+        let activity_log = Paragraph::new(Line::from(vec![
+            Span::styled(
+                message,
+                Style::default().fg(Color::Rgb(57, 255, 20)),
+            )
+        ]));
+        frame.render_widget(activity_log, chunks[1]);
+    }
 
     // Render help message if needed
     if app.show_help {
@@ -185,16 +227,22 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 Style::default().fg(Color::Rgb(57, 255, 20)),
             ),
         ])]);
-        frame.render_widget(help, chunks[1]);
+        frame.render_widget(help, chunks[2]);
     }
 
-    // Render input
-    frame.render_widget(input, chunks[2]);
+    // Create input widget with pre-wrapped lines
+    let input = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Rgb(57, 255, 20)));
+
+    // Use the last chunk for input, accounting for help message visibility
+    let input_chunk = if app.show_help { chunks[3] } else { chunks[2] };
+    frame.render_widget(input, input_chunk);
 
     // Calculate cursor position
     let cursor_x = cursor_position as u16 % available_width as u16;
-    let cursor_y = cursor_position as u16 / available_width as u16;
+    let cursor_y = (cursor_position / available_width) as u16;
 
     // Set cursor position accounting for borders
-    frame.set_cursor(chunks[2].x + 1 + cursor_x, chunks[2].y + 1 + cursor_y);
+    frame.set_cursor(input_chunk.x + 1 + cursor_x, input_chunk.y + 1 + cursor_y);
 }

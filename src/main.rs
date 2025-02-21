@@ -10,7 +10,7 @@ use crossterm::event::{self, Event, KeyCode};
 use std::io;
 use taskstore::{load_tasks, Task};
 use tui_input::Input;
-use crate::ui::TaskpadState;
+use crate::ui::{TaskpadState, ActivityLog};
 
 /// Central state container for the cyberorganism application.
 pub struct App {
@@ -24,6 +24,8 @@ pub struct App {
     pub show_help: bool,
     /// State of the taskpad display
     pub taskpad_state: TaskpadState,
+    /// Log of user activities
+    pub activity_log: ActivityLog,
 }
 
 impl App {
@@ -35,7 +37,13 @@ impl App {
             next_id: 1,
             show_help: true,
             taskpad_state: TaskpadState::new(),
+            activity_log: ActivityLog::new(),
         }
+    }
+
+    /// Adds a message to the activity log
+    pub fn log_activity(&mut self, message: impl Into<String>) {
+        self.activity_log.add_message(message.into());
     }
 }
 

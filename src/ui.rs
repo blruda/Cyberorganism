@@ -5,14 +5,14 @@
 //! teardown, and rendering of the task management interface.
 
 use crossterm::{
-    execute,
     event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{prelude::*, widgets::*};
 use std::io;
 
-use crate::{App, taskstore::Task, debug::log_debug};
+use crate::{debug::log_debug, taskstore::Task, App};
 
 /// Initializes the terminal for TUI operation.
 ///
@@ -74,7 +74,8 @@ impl TaskpadState {
     /// Only includes tasks in the taskpad container (not archived).
     /// The display will show tasks as a numbered list starting from 1.
     pub fn update_display_order(&mut self, tasks: &[Task]) {
-        self.display_to_id = tasks.iter()
+        self.display_to_id = tasks
+            .iter()
             .filter(|task| task.is_in_taskpad())
             .map(|task| task.id)
             .collect();
@@ -131,7 +132,7 @@ impl ActivityLog {
 ///   1. First task
 ///   2. Second task
 ///   3. Very long task that exceeds the width will be trunc...
-/// 
+///
 /// Tasks are filtered to only show those in the taskpad (not archived),
 /// and each task is truncated if it would exceed the width of the display.
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -195,7 +196,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let available_width = tasks_area.width.saturating_sub(2) as usize; // Subtract 2 for borders
 
     // Filter tasks to only show taskpad tasks
-    let taskpad_tasks: Vec<_> = app.tasks.iter()
+    let taskpad_tasks: Vec<_> = app
+        .tasks
+        .iter()
         .filter(|task| task.is_in_taskpad())
         .collect();
 

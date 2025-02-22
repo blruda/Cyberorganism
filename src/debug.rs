@@ -2,10 +2,10 @@
 //! This module provides utilities for logging debug information to a file
 //! during development and testing.
 
+use chrono::Local;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::sync::Once;
-use chrono::Local;
 
 static DEBUG_INIT: Once = Once::new();
 static mut DEBUG_FILE: Option<File> = None;
@@ -21,7 +21,7 @@ fn init_debug_log() {
             eprintln!("Failed to initialize debug log: {e}");
             std::process::exit(1);
         });
-    
+
     unsafe {
         DEBUG_FILE = Some(file);
     }
@@ -30,9 +30,9 @@ fn init_debug_log() {
 /// Logs a debug message to the debug log file
 pub fn log_debug(msg: &str) {
     DEBUG_INIT.call_once(init_debug_log);
-    
+
     let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S");
-    
+
     unsafe {
         let debug_file = &raw mut DEBUG_FILE;
         if let Some(file) = (*debug_file).as_mut() {

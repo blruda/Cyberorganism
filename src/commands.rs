@@ -42,7 +42,7 @@ fn find_task(app: &App, query: &str) -> Option<usize> {
         }
         log_debug(&format!("No task at index {index}"));
     }
-    
+
     // Fall back to fuzzy content match
     find_task_by_content(&app.tasks, query)
 }
@@ -56,12 +56,12 @@ fn complete_task(app: &mut App, query: &str) -> CommandResult {
         } else {
             let content = task.content.clone();
             task.complete();
-            
+
             // Save tasks after completing one
             if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
                 log_debug(&format!("Failed to save tasks: {e}"));
             }
-            
+
             CommandResult::TaskCompleted { content }
         }
     } else {
@@ -99,31 +99,29 @@ fn execute_command(app: &mut App, command: Option<Command>) {
             app.next_id += 1;
             app.tasks.push(task);
             app.log_activity(format!("Created task: {content}"));
-            
+
             // Save tasks after creating a new one
             if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
                 log_debug(&format!("Failed to save tasks: {e}"));
             }
         }
-        Some(Command::Complete(query)) => {
-            match complete_task(app, &query) {
-                CommandResult::TaskCompleted { content } => {
-                    app.log_activity(format!("Completed task: {content}"));
-                }
-                CommandResult::TaskAlreadyArchived(content) => {
-                    app.log_activity(format!("Task '{content}' is already archived"));
-                }
-                CommandResult::NoMatchingTask => {
-                    app.log_activity("No matching task found".to_string());
-                }
+        Some(Command::Complete(query)) => match complete_task(app, &query) {
+            CommandResult::TaskCompleted { content } => {
+                app.log_activity(format!("Completed task: {content}"));
             }
-        }
+            CommandResult::TaskAlreadyArchived(content) => {
+                app.log_activity(format!("Task '{content}' is already archived"));
+            }
+            CommandResult::NoMatchingTask => {
+                app.log_activity("No matching task found".to_string());
+            }
+        },
         Some(Command::Delete(query)) => {
             if let Some(index) = find_task(app, &query) {
                 let content = app.tasks[index].content.clone();
                 app.tasks.remove(index);
                 app.log_activity(format!("Deleted task: {content}"));
-                
+
                 // Save tasks after deleting one
                 if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
                     log_debug(&format!("Failed to save tasks: {e}"));
@@ -136,7 +134,7 @@ fn execute_command(app: &mut App, command: Option<Command>) {
             app.log_activity("Invalid command".to_string());
         }
     }
-    
+
     // Update display after any command
     app.taskpad_state.update_display_order(&app.tasks);
     app.show_help = false;

@@ -1,8 +1,8 @@
 //! Core data structures and persistence layer for cyberorganism. Handles task
 //! representation, serialization, and file-based storage operations.
 
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
@@ -73,7 +73,7 @@ impl TaskContainer {
             Self::Taskpad => "taskpad",
             Self::Backburner => "backburner",
             Self::Shelved => "shelved",
-            Self::Archived => "archived"
+            Self::Archived => "archived",
         }
     }
 }
@@ -97,12 +97,13 @@ pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
 /// Finds a task in a slice of tasks by fuzzy matching its content.
 /// Prioritizes tasks in the taskpad container over archived tasks.
 pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
-    use fuzzy_matcher::FuzzyMatcher;
     use fuzzy_matcher::skim::SkimMatcherV2;
+    use fuzzy_matcher::FuzzyMatcher;
     let matcher = SkimMatcherV2::default();
 
     // First try to find a match in taskpad tasks
-    let taskpad_match = tasks.iter()
+    let taskpad_match = tasks
+        .iter()
         .enumerate()
         .filter(|(_, task)| task.is_in_taskpad())
         .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0));
@@ -112,7 +113,8 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
     }
 
     // If no taskpad match, look in all tasks
-    tasks.iter()
+    tasks
+        .iter()
         .enumerate()
         .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0))
         .and_then(|(index, task)| {
@@ -135,7 +137,7 @@ pub fn save_tasks(tasks: &[Task], path: &str) -> std::io::Result<()> {
     if let Some(parent) = Path::new(path).parent() {
         fs::create_dir_all(parent)?;
     }
-    
+
     let json = serde_json::to_string_pretty(tasks)?;
     fs::write(path, json)
 }

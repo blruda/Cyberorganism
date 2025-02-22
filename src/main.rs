@@ -69,7 +69,7 @@ fn main() -> io::Result<()> {
 
     // Create app state
     let mut app = App::new();
-    
+
     // Load tasks from disk if available
     if let Ok(tasks) = load_tasks(&app.tasks_file) {
         app.tasks = tasks;
@@ -85,15 +85,19 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+fn run_app<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    mut app: App,
+) -> io::Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, &app))?;
 
         if event::poll(Duration::from_millis(100))? {
             let event = event::read()?;
             if let Event::Key(key) = event {
-                if key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL 
-                    || key.code == KeyCode::Esc {
+                if key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL
+                    || key.code == KeyCode::Esc
+                {
                     return Ok(());
                 }
                 commands::handle_input_event(&mut app, event);

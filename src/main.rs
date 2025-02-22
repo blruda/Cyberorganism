@@ -3,29 +3,34 @@
 //! command handling to their respective specialized modules.
 
 mod commands;
+mod debug;
 mod taskstore;
 mod ui;
 
 use crate::ui::{ActivityLog, TaskpadState};
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::Terminal;
 use std::io;
+use std::time::Duration;
 use taskstore::{load_tasks, Task};
 use tui_input::Input;
 
-/// Central state container for the cyberorganism application.
+/// Represents the current state of the application
 pub struct App {
-    /// Collection of all tasks in the system
-    pub tasks: Vec<Task>,
-    /// Current user input being typed
+    /// Input field for entering commands
     pub input: Input,
-    /// Counter for generating the next unique task ID
+    /// List of all tasks
+    pub tasks: Vec<Task>,
+    /// Next available task ID
     pub next_id: u32,
-    /// Whether to show the help message
-    pub show_help: bool,
+    /// Path to the tasks file
+    pub tasks_file: String,
     /// State of the taskpad display
     pub taskpad_state: TaskpadState,
-    /// Log of user activities
+    /// Log of recent activity
     pub activity_log: ActivityLog,
+    /// Whether to show help text
+    pub show_help: bool,
 }
 
 impl Default for App {
@@ -35,28 +40,28 @@ impl Default for App {
 }
 
 impl App {
-    /// Creates a new application instance with default state.
+    /// Creates a new application state
     #[must_use]
     pub fn new() -> Self {
         Self {
-            tasks: load_tasks().unwrap_or_default(),
             input: Input::default(),
+            tasks: Vec::new(),
             next_id: 1,
-            show_help: true,
+            tasks_file: "tasks.json".to_string(),
             taskpad_state: TaskpadState::new(),
             activity_log: ActivityLog::new(),
+            show_help: true,
         }
     }
 
-    /// Adds a message to the activity log
-    pub fn log_activity(&mut self, message: impl Into<String>) {
-        self.activity_log.add_message(message.into());
+    /// Logs an activity message
+    pub fn log_activity(&mut self, message: String) {
+        self.activity_log.add_message(message);
     }
 }
 
-/// Application entry point and main event loop.
-///
-/// Sets up the terminal UI, initializes the application state,
+/// Runs the application, setting up the terminal,
+/// loading the initial state from disk if available,
 /// and processes user input until exit.
 fn main() -> io::Result<()> {
     // Set up terminal
@@ -64,25 +69,35 @@ fn main() -> io::Result<()> {
 
     // Create app state
     let mut app = App::new();
-
-    // Main loop
-    loop {
-        // Draw the current state of the app
-        terminal.draw(|frame| {
-            ui::draw(frame, &app);
-        })?;
-
-        // Handle input
-        if let Event::Key(key) = event::read()? {
-            match key.code {
-                KeyCode::Esc => break,
-                KeyCode::Char('c') if key.modifiers == event::KeyModifiers::CONTROL => break,
-                _ => commands::handle_input(&mut app, key.code),
-            }
-        }
+    
+    // Load tasks from disk if available
+    if let Ok(tasks) = load_tasks(&app.tasks_file) {
+        app.tasks = tasks;
+        app.next_id = app.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        app.taskpad_state.update_display_order(&app.tasks);
     }
+
+    // Run app
+    run_app(&mut terminal, app)?;
 
     // Restore terminal
     ui::restore_terminal(&mut terminal)?;
     Ok(())
+}
+
+fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+    loop {
+        terminal.draw(|f| ui::draw(f, &app))?;
+
+        if event::poll(Duration::from_millis(100))? {
+            let event = event::read()?;
+            if let Event::Key(key) = event {
+                if key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL 
+                    || key.code == KeyCode::Esc {
+                    return Ok(());
+                }
+                commands::handle_input_event(&mut app, event);
+            }
+        }
+    }
 }

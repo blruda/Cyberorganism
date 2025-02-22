@@ -5,14 +5,14 @@
 //! teardown, and rendering of the task management interface.
 
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
+    event::{DisableMouseCapture, EnableMouseCapture},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{prelude::*, widgets::*};
 use std::io;
 
-use crate::{App, Task};
+use crate::{App, taskstore::Task, debug::log_debug};
 
 /// Initializes the terminal for TUI operation.
 ///
@@ -47,9 +47,12 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
     Ok(())
 }
 
-/// Maintains the display state of tasks in the taskpad
+/// Manages the display state of tasks in the taskpad.
+/// Tasks are displayed as a numbered list (1. Task A, 2. Task B, etc.)
+/// with each task truncated to fit within a single line if necessary.
+#[derive(Debug)]
 pub struct TaskpadState {
-    /// Maps 1-based display indices to task IDs
+    /// Maps display positions to task IDs
     display_to_id: Vec<u32>,
 }
 
@@ -67,9 +70,15 @@ impl TaskpadState {
         }
     }
 
-    /// Updates the display order based on the current tasks
+    /// Updates the display order based on the current tasks.
+    /// Only includes tasks in the taskpad container (not archived).
+    /// The display will show tasks as a numbered list starting from 1.
     pub fn update_display_order(&mut self, tasks: &[Task]) {
-        self.display_to_id = tasks.iter().map(|task| task.id).collect();
+        self.display_to_id = tasks.iter()
+            .filter(|task| task.is_in_taskpad())
+            .map(|task| task.id)
+            .collect();
+        log_debug(&format!("Updated display order: {:?}", self.display_to_id));
     }
 
     /// Gets a task ID from a 1-based display index
@@ -77,7 +86,8 @@ impl TaskpadState {
         if display_index == 0 || display_index > self.display_to_id.len() {
             None
         } else {
-            self.display_to_id.get(display_index - 1).copied()
+            let task_id = self.display_to_id.get(display_index - 1).copied();
+            task_id
         }
     }
 
@@ -116,15 +126,14 @@ impl ActivityLog {
     }
 }
 
-/// Renders the current application state to the terminal.
-///
-/// ### Arguments
-/// * `frame` - Current frame to render to
-/// * `app` - Application state to render
-///
-/// ### Layout
-/// * Top section: Input area for new tasks
-/// * Bottom section: List of existing tasks
+/// Draws the application UI.
+/// The main area shows tasks in the taskpad as a numbered list:
+///   1. First task
+///   2. Second task
+///   3. Very long task that exceeds the width will be trunc...
+/// 
+/// Tasks are filtered to only show those in the taskpad (not archived),
+/// and each task is truncated if it would exceed the width of the display.
 pub fn draw(frame: &mut Frame, app: &App) {
     // Create initial layout to get available width
     let temp_chunks = Layout::default()
@@ -185,8 +194,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let tasks_area = chunks[0];
     let available_width = tasks_area.width.saturating_sub(2) as usize; // Subtract 2 for borders
 
-    let tasks_text: Vec<Line> = app
-        .tasks
+    // Filter tasks to only show taskpad tasks
+    let taskpad_tasks: Vec<_> = app.tasks.iter()
+        .filter(|task| task.is_in_taskpad())
+        .collect();
+
+    let tasks_text: Vec<Line> = taskpad_tasks
         .iter()
         .enumerate()
         .map(|(idx, task)| {

@@ -1,10 +1,9 @@
 //! Core data structures and persistence layer for cyberorganism. Handles task
 //! representation, serialization, and file-based storage operations.
 
+use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io;
 use std::path::Path;
 
 /// A single task in the cyberorganism system.
@@ -25,8 +24,37 @@ pub struct Task {
     pub status: TaskStatus,
 }
 
+impl Task {
+    /// Creates a new task with the given content
+    pub fn new(id: u32, content: String) -> Self {
+        Self {
+            id,
+            content,
+            created_at: Utc::now(),
+            container: TaskContainer::Taskpad,
+            status: TaskStatus::Todo,
+        }
+    }
+
+    /// Marks the task as complete and moves it to the archived container
+    pub fn complete(&mut self) {
+        self.status = TaskStatus::Done;
+        self.container = TaskContainer::Archived;
+    }
+
+    /// Returns true if the task is in the taskpad container
+    pub const fn is_in_taskpad(&self) -> bool {
+        matches!(self.container, TaskContainer::Taskpad)
+    }
+
+    /// Returns the container this task is in
+    pub const fn container(&self) -> &TaskContainer {
+        &self.container
+    }
+}
+
 /// Represents where the task is located in our system
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskContainer {
     /// Task is in the inbox, waiting to be processed
     Taskpad,
@@ -38,8 +66,20 @@ pub enum TaskContainer {
     Archived,
 }
 
+impl TaskContainer {
+    /// Returns a human-readable name for the container
+    pub const fn display_name(&self) -> &'static str {
+        match self {
+            Self::Taskpad => "taskpad",
+            Self::Backburner => "backburner",
+            Self::Shelved => "shelved",
+            Self::Archived => "archived"
+        }
+    }
+}
+
 /// Represents the current state of a task
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskStatus {
     /// Task is new and needs attention
     Todo,
@@ -49,28 +89,64 @@ pub enum TaskStatus {
     Done,
 }
 
+/// Finds a task in a slice of tasks by its ID
+pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
+    tasks.iter().position(|task| task.id == id)
+}
+
+/// Finds a task in a slice of tasks by fuzzy matching its content.
+/// Prioritizes tasks in the taskpad container over archived tasks.
+pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
+    use fuzzy_matcher::FuzzyMatcher;
+    use fuzzy_matcher::skim::SkimMatcherV2;
+    let matcher = SkimMatcherV2::default();
+
+    // First try to find a match in taskpad tasks
+    let taskpad_match = tasks.iter()
+        .enumerate()
+        .filter(|(_, task)| task.is_in_taskpad())
+        .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0));
+
+    if let Some((index, _)) = taskpad_match {
+        return Some(index);
+    }
+
+    // If no taskpad match, look in all tasks
+    tasks.iter()
+        .enumerate()
+        .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0))
+        .and_then(|(index, task)| {
+            // Only return a match if it actually matches
+            if matcher.fuzzy_match(&task.content, query).is_some() {
+                Some(index)
+            } else {
+                None
+            }
+        })
+}
+
 /// Saves the current tasks to a JSON file.
 ///
 /// ### Arguments
-/// * `tasks` - Vector of tasks to save
-///
-/// ### Returns
-/// * `Ok(())` if save was successful
-/// * `Err(io::Error)` if save failed
-pub fn save_tasks(tasks: &[Task]) -> io::Result<()> {
+/// * `tasks` - A slice of tasks to save
+/// * `path` - Path to the tasks storage file
+pub fn save_tasks(tasks: &[Task], path: &str) -> std::io::Result<()> {
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = Path::new(path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
     let json = serde_json::to_string_pretty(tasks)?;
-    fs::write("tasks.json", json)?;
-    Ok(())
+    fs::write(path, json)
 }
 
 /// Loads tasks from the JSON file.
 ///
-/// ### Returns
-/// * `Ok(Vec<Task>)` if load was successful
-/// * `Err(io::Error)` if load failed or file doesn't exist
-pub fn load_tasks() -> io::Result<Vec<Task>> {
-    if Path::new("tasks.json").exists() {
-        let json = fs::read_to_string("tasks.json")?;
+/// ### Arguments
+/// * `path` - Path to the tasks storage file
+pub fn load_tasks(path: &str) -> std::io::Result<Vec<Task>> {
+    if Path::new(path).exists() {
+        let json = fs::read_to_string(path)?;
         Ok(serde_json::from_str(&json)?)
     } else {
         Ok(Vec::new())

@@ -2,7 +2,7 @@
 
 # cyberorganism
 tasks.json
-cyberorganism_debug.log
+debug.log
 
 # Windsurf
 .windsurfrules

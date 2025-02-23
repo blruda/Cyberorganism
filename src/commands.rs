@@ -35,12 +35,15 @@ enum CommandResult {
 
 /// Finds a task by display index or content match
 fn find_task(app: &App, query: &str) -> Option<usize> {
-    // First try to parse as a display index
-    if let Ok(index) = query.parse::<usize>() {
-        if let Some(task_id) = app.taskpad_state.get_task_id(index) {
-            return find_task_by_id(&app.tasks, task_id);
+    // Only treat as index if query is exactly one integer and nothing else
+    let query = query.trim();
+    if query.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(index) = query.parse::<usize>() {
+            if let Some(task_id) = app.taskpad_state.get_task_id(index) {
+                return find_task_by_id(&app.tasks, task_id);
+            }
+            log_debug(&format!("No task at index {index}"));
         }
-        log_debug(&format!("No task at index {index}"));
     }
 
     // Fall back to fuzzy content match

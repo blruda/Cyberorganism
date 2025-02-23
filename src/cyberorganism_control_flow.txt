@@ -54,3 +54,6 @@ Imagine our task management system as a living digital organism, a cyberorganism
 This cyberorganism represents a symbiosis of human thought and machine efficiency. Each keystroke is a neural impulse, each task a memory, each save operation a strengthening of synaptic connections. The system lives, breathes, and evolves with its user, maintaining a delicate balance between chaos and order, between the ephemeral nature of thoughts and the permanence of digital memory.
 
 The beauty of this organism lies in its ability to transform the abstract (human tasks and intentions) into the concrete (structured data and persistent storage), all while maintaining the fluidity and responsiveness of a living system. It's not just a program; it's a digital extension of human cognitive processes, a cybernetic companion in the quest for productivity and organization.
+
+Useful terminal commands:
+- `cargo clippy -- -W clippy::pedantic -W clippy::nursery` to run clippy

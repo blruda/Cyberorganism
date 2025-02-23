@@ -146,10 +146,14 @@ fn execute_command(app: &mut App, command: Option<Command>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use tempfile::tempdir;
 
     fn setup_test_app() -> App {
+        let temp_dir = tempdir().expect("Failed to create temp directory");
+        let tasks_file = temp_dir.path().join("tasks.json").to_str().unwrap().to_string();
+        
         let mut app = App::default();
+        app.tasks_file = tasks_file;
         app.tasks.push(Task::new(1, "Buy groceries".to_string()));
         app.tasks.push(Task::new(2, "Call dentist".to_string()));
         app.tasks.push(Task::new(3, "Write report".to_string()));

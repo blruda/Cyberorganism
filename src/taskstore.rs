@@ -5,6 +5,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 
 /// A single task in the cyberorganism system.
 ///
@@ -101,14 +103,13 @@ pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
 /// - Returns None for empty queries
 /// - Only matches full content with tolerance for typos
 /// - Case insensitive
+#[allow(clippy::cast_possible_wrap)]
 pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
     // Return None for empty queries
     if query.is_empty() {
         return None;
     }
 
-    use fuzzy_matcher::skim::SkimMatcherV2;
-    use fuzzy_matcher::FuzzyMatcher;
     let matcher = SkimMatcherV2::default().ignore_case();
 
     // Calculate minimum score based on query length - allow roughly 1-2 typos

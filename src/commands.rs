@@ -142,3 +142,165 @@ fn execute_command(app: &mut App, command: Option<Command>) {
     app.taskpad_state.update_display_order(&app.tasks);
     app.show_help = false;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::taskstore::{TaskStatus, TaskContainer};
+
+    fn setup_test_app() -> App {
+        let mut app = App::default();
+        app.tasks.push(Task::new(1, "Buy groceries".to_string()));
+        app.tasks.push(Task::new(2, "Call dentist".to_string()));
+        app.tasks.push(Task::new(3, "Write report".to_string()));
+        app.next_id = 4;
+        app
+    }
+
+    #[test]
+    fn test_parse_command() {
+        // Test create command (default)
+        let cmd = parse_command("Buy milk".to_string());
+        assert!(matches!(cmd, Command::Create(content) if content == "Buy milk"));
+
+        // Test complete command
+        let cmd = parse_command("complete Test task".to_string());
+        assert!(matches!(cmd, Command::Complete(content) if content == "Test task"));
+
+        // Test delete command
+        let cmd = parse_command("delete Test task".to_string());
+        assert!(matches!(cmd, Command::Delete(content) if content == "Test task"));
+
+        // Test with trailing spaces in task content
+        let cmd = parse_command("complete Test task  ".to_string());
+        assert!(matches!(cmd, Command::Complete(content) if content == "Test task  "));
+    }
+
+    #[test]
+    fn test_find_task_by_exact_content() {
+        let app = setup_test_app();
+        
+        // Find by exact content
+        let index = find_task(&app, "Buy groceries");
+        assert!(index.is_some());
+        assert_eq!(app.tasks[index.unwrap()].content, "Buy groceries");
+    }
+
+    #[test]
+    fn test_find_task_by_partial_content() {
+        let app = setup_test_app();
+        
+        // Find by partial content
+        let index = find_task(&app, "groceries");
+        assert!(index.is_some());
+        assert_eq!(app.tasks[index.unwrap()].content, "Buy groceries");
+    }
+
+    #[test]
+    fn test_find_task_by_display_index() {
+        let mut app = setup_test_app();
+        app.taskpad_state.update_display_order(&app.tasks);
+        
+        // Find by display index
+        let index = find_task(&app, "1");
+        assert!(index.is_some());
+    }
+
+    #[test]
+    fn test_find_nonexistent_task() {
+        let app = setup_test_app();
+        
+        // Try to find nonexistent task
+        let index = find_task(&app, "xyz123");
+        assert!(index.is_none());
+    }
+
+    #[test]
+    fn test_find_deleted_task() {
+        let mut app = setup_test_app();
+        
+        // Delete a task
+        let index = find_task(&app, "groceries").unwrap();
+        app.tasks.remove(index);
+        
+        // Try to find the deleted task
+        let index = find_task(&app, "groceries");
+        assert!(index.is_none());
+    }
+
+    #[test]
+    fn test_complete_task_success() {
+        let mut app = setup_test_app();
+        
+        // Complete existing task
+        let result = complete_task(&mut app, "groceries");
+        assert!(matches!(result, CommandResult::TaskCompleted { content } if content == "Buy groceries"));
+        assert!(matches!(app.tasks[0].status, TaskStatus::Done));
+        assert!(matches!(app.tasks[0].container, TaskContainer::Archived));
+    }
+
+    #[test]
+    fn test_complete_already_archived_task() {
+        let mut app = setup_test_app();
+        
+        // Complete task first time
+        let _ = complete_task(&mut app, "groceries");
+        
+        // Try to complete it again
+        let result = complete_task(&mut app, "groceries");
+        assert!(matches!(result, CommandResult::TaskAlreadyArchived(content) if content == "Buy groceries"));
+    }
+
+    #[test]
+    fn test_complete_nonexistent_task() {
+        let mut app = setup_test_app();
+        let result = complete_task(&mut app, "xyz123");
+        assert!(matches!(result, CommandResult::NoMatchingTask));
+    }
+
+    #[test]
+    fn test_delete_task_by_content() {
+        let mut app = setup_test_app();
+        let initial_count = app.tasks.len();
+        
+        // Delete by content match
+        execute_command(&mut app, Some(Command::Delete("groceries".to_string())));
+        assert_eq!(app.tasks.len(), initial_count - 1);
+        assert!(app.tasks.iter().all(|t| t.content != "Buy groceries"));
+    }
+
+    #[test]
+    fn test_delete_task_by_index() {
+        let mut app = setup_test_app();
+        let initial_count = app.tasks.len();
+        app.taskpad_state.update_display_order(&app.tasks);
+        
+        // Delete by display index
+        execute_command(&mut app, Some(Command::Delete("1".to_string())));
+        assert_eq!(app.tasks.len(), initial_count - 1);
+    }
+
+    #[test]
+    fn test_delete_nonexistent_task() {
+        let mut app = setup_test_app();
+        let initial_count = app.tasks.len();
+        
+        // Try to delete nonexistent task
+        execute_command(&mut app, Some(Command::Delete("xyz123".to_string())));
+        assert_eq!(app.tasks.len(), initial_count);
+    }
+
+    #[test]
+    fn test_delete_completed_task() {
+        let mut app = setup_test_app();
+        
+        // Complete a task first
+        let _ = complete_task(&mut app, "groceries");
+        let initial_count = app.tasks.len();
+        
+        // Delete the completed task
+        execute_command(&mut app, Some(Command::Delete("groceries".to_string())));
+        assert_eq!(app.tasks.len(), initial_count - 1);
+        assert!(app.tasks.iter().all(|t| t.content != "Buy groceries"));
+    }
+}

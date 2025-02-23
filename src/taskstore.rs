@@ -108,8 +108,11 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
         .filter(|(_, task)| task.is_in_taskpad())
         .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0));
 
-    if let Some((index, _)) = taskpad_match {
-        return Some(index);
+    if let Some((index, task)) = taskpad_match {
+        // Only return a match if it actually matches
+        if let Some(_) = matcher.fuzzy_match(&task.content, query) {
+            return Some(index);
+        }
     }
 
     // If no taskpad match, look in all tasks
@@ -119,7 +122,7 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
         .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0))
         .and_then(|(index, task)| {
             // Only return a match if it actually matches
-            if matcher.fuzzy_match(&task.content, query).is_some() {
+            if let Some(_) = matcher.fuzzy_match(&task.content, query) {
                 Some(index)
             } else {
                 None

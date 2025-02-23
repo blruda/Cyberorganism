@@ -231,14 +231,20 @@ fn create_activity_log_widget(message: &str) -> Paragraph<'_> {
 /// Create the help widget
 fn create_help_widget() -> Paragraph<'static> {
     Paragraph::new(vec![Line::from(vec![
-        Span::styled("Press ".to_string(), Style::default().fg(Color::Rgb(57, 255, 20))),
+        Span::styled(
+            "Press ".to_string(),
+            Style::default().fg(Color::Rgb(57, 255, 20)),
+        ),
         Span::styled(
             "esc".to_string(),
             Style::default()
                 .fg(Color::Rgb(57, 255, 20))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" or ".to_string(), Style::default().fg(Color::Rgb(57, 255, 20))),
+        Span::styled(
+            " or ".to_string(),
+            Style::default().fg(Color::Rgb(57, 255, 20)),
+        ),
         Span::styled(
             "ctrl-c".to_string(),
             Style::default()
@@ -276,12 +282,9 @@ const fn calculate_cursor_position(cursor_pos: usize, available_width: usize) ->
 /// and each task is truncated if it would exceed the width of the display.
 pub fn draw(frame: &mut Frame, app: &App) {
     let available_width = calculate_available_width(frame.size());
-    let (input_lines, input_height) = calculate_input_dimensions(
-        app.input.value(),
-        app.input.cursor(),
-        available_width,
-    );
-    
+    let (input_lines, input_height) =
+        calculate_input_dimensions(app.input.value(), app.input.cursor(), available_width);
+
     let constraints = create_layout_constraints(input_height, app.show_help);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -312,10 +315,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Set cursor position
     let (cursor_x, cursor_y) = calculate_cursor_position(app.input.cursor(), available_width);
-    frame.set_cursor(
-        input_chunk.x + 1 + cursor_x,
-        input_chunk.y + 1 + cursor_y,
-    );
+    frame.set_cursor(input_chunk.x + 1 + cursor_x, input_chunk.y + 1 + cursor_y);
 }
 
 #[cfg(test)]
@@ -379,19 +379,19 @@ mod tests {
     #[test]
     fn test_activity_log() {
         let mut log = ActivityLog::new();
-        
+
         // Test empty log
         assert_eq!(log.latest_message(), None);
-        
+
         // Test single message
         log.add_message("First message".to_string());
         assert_eq!(log.latest_message(), Some("First message"));
-        
+
         // Test message limit
         for i in 0..20 {
             log.add_message(format!("Message {}", i));
         }
-        
+
         // Should keep the most recent message
         assert_eq!(log.latest_message(), Some("Message 19"));
     }
@@ -401,7 +401,10 @@ mod tests {
         // Test empty input
         let (lines, height) = calculate_input_dimensions("", 0, 10);
         assert_eq!(lines.len(), 1, "Empty input should have one line");
-        assert_eq!(height, 3, "Empty input should have height of 3 (1 line + 2 borders)");
+        assert_eq!(
+            height, 3,
+            "Empty input should have height of 3 (1 line + 2 borders)"
+        );
 
         // Test single line input
         let (lines, height) = calculate_input_dimensions("hello", 5, 10);
@@ -423,8 +426,12 @@ mod tests {
     fn test_create_layout_constraints() {
         // Test without help message
         let constraints = create_layout_constraints(3, false);
-        assert_eq!(constraints.len(), 3, "Should have 3 constraints without help");
-        
+        assert_eq!(
+            constraints.len(),
+            3,
+            "Should have 3 constraints without help"
+        );
+
         // Test with help message
         let constraints = create_layout_constraints(3, true);
         assert_eq!(constraints.len(), 4, "Should have 4 constraints with help");
@@ -433,7 +440,7 @@ mod tests {
     #[test]
     fn test_format_task_line() {
         let now = Utc::now();
-        
+
         // Test normal task
         let task = Task {
             id: 1,
@@ -454,8 +461,14 @@ mod tests {
             status: TaskStatus::Todo,
         };
         let line = format_task_line(0, &long_task, 20);
-        assert!(line.spans[0].content.len() <= 20, "Line should be truncated to width");
-        assert!(line.spans[0].content.ends_with("..."), "Truncated line should end with ...");
+        assert!(
+            line.spans[0].content.len() <= 20,
+            "Line should be truncated to width"
+        );
+        assert!(
+            line.spans[0].content.ends_with("..."),
+            "Truncated line should end with ..."
+        );
 
         // Test index width handling
         let numbered_task = Task {

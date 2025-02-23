@@ -150,8 +150,13 @@ mod tests {
 
     fn setup_test_app() -> App {
         let temp_dir = tempdir().expect("Failed to create temp directory");
-        let tasks_file = temp_dir.path().join("tasks.json").to_str().unwrap().to_string();
-        
+        let tasks_file = temp_dir
+            .path()
+            .join("tasks.json")
+            .to_str()
+            .unwrap()
+            .to_string();
+
         let mut app = App::default();
         app.tasks_file = tasks_file;
         app.tasks.push(Task::new(1, "Buy groceries".to_string()));
@@ -183,7 +188,7 @@ mod tests {
     #[test]
     fn test_find_task_by_partial_content() {
         let app = setup_test_app();
-        
+
         // Should match exact content
         let index = find_task(&app, "Buy groceries");
         assert!(index.is_some());
@@ -196,7 +201,7 @@ mod tests {
     #[test]
     fn test_find_task_by_exact_content() {
         let app = setup_test_app();
-        
+
         // Find by exact content
         let index = find_task(&app, "Buy groceries");
         assert!(index.is_some());
@@ -207,7 +212,7 @@ mod tests {
     fn test_find_task_by_display_index() {
         let mut app = setup_test_app();
         app.taskpad_state.update_display_order(&app.tasks);
-        
+
         // Find by display index
         let index = find_task(&app, "1");
         assert!(index.is_some());
@@ -223,12 +228,12 @@ mod tests {
     fn test_find_deleted_task() {
         let mut app = setup_test_app();
         let initial_count = app.tasks.len();
-        
+
         // First find and delete a task
         let index = find_task(&app, "Buy groceries").unwrap();
         app.tasks.remove(index);
         assert_eq!(app.tasks.len(), initial_count - 1);
-        
+
         // Now try to find it again
         assert!(find_task(&app, "Buy groceries").is_none());
     }
@@ -237,19 +242,23 @@ mod tests {
     fn test_complete_task_success() {
         let mut app = setup_test_app();
         let result = complete_task(&mut app, "Buy groceries");
-        assert!(matches!(result, CommandResult::TaskCompleted { content } if content == "Buy groceries"));
+        assert!(
+            matches!(result, CommandResult::TaskCompleted { content } if content == "Buy groceries")
+        );
     }
 
     #[test]
     fn test_complete_already_archived_task() {
         let mut app = setup_test_app();
-        
+
         // First complete the task
         let _ = complete_task(&mut app, "Buy groceries");
-        
+
         // Try to complete it again
         let result = complete_task(&mut app, "Buy groceries");
-        assert!(matches!(result, CommandResult::TaskAlreadyArchived(content) if content == "Buy groceries"));
+        assert!(
+            matches!(result, CommandResult::TaskAlreadyArchived(content) if content == "Buy groceries")
+        );
     }
 
     #[test]
@@ -263,7 +272,7 @@ mod tests {
     fn test_delete_task_by_content() {
         let mut app = setup_test_app();
         let initial_count = app.tasks.len();
-        
+
         // Delete by content match
         execute_command(&mut app, Some(Command::Delete("Buy groceries".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);
@@ -274,10 +283,10 @@ mod tests {
     fn test_delete_task_by_index() {
         let mut app = setup_test_app();
         let initial_count = app.tasks.len();
-        
+
         // Update display order first
         app.taskpad_state.update_display_order(&app.tasks);
-        
+
         // Delete by index
         execute_command(&mut app, Some(Command::Delete("1".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);
@@ -287,9 +296,12 @@ mod tests {
     fn test_delete_nonexistent_task() {
         let mut app = setup_test_app();
         let initial_count = app.tasks.len();
-        
+
         // Try to delete nonexistent task
-        execute_command(&mut app, Some(Command::Delete("nonexistent task".to_string())));
+        execute_command(
+            &mut app,
+            Some(Command::Delete("nonexistent task".to_string())),
+        );
         assert_eq!(app.tasks.len(), initial_count);
     }
 
@@ -297,10 +309,10 @@ mod tests {
     fn test_delete_completed_task() {
         let mut app = setup_test_app();
         let initial_count = app.tasks.len();
-        
+
         // First complete a task
         let _ = complete_task(&mut app, "Buy groceries");
-        
+
         // Then delete it
         execute_command(&mut app, Some(Command::Delete("Buy groceries".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);

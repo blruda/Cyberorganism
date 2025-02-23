@@ -2,11 +2,11 @@
 //! representation, serialization, and file-based storage operations.
 
 use chrono::{DateTime, Utc};
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use fuzzy_matcher::skim::SkimMatcherV2;
-use fuzzy_matcher::FuzzyMatcher;
 
 /// A single task in the cyberorganism system.
 ///
@@ -98,7 +98,7 @@ pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
 
 /// Finds a task in a slice of tasks by matching its content.
 /// Prioritizes tasks in the taskpad container over archived tasks.
-/// 
+///
 /// The matching is intentionally strict:
 /// - Returns None for empty queries
 /// - Only matches full content with tolerance for typos
@@ -116,17 +116,20 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
     let min_score = query.len() as i64 * 2 - 3;
 
     // First try taskpad tasks
-    let taskpad_match = tasks.iter()
+    let taskpad_match = tasks
+        .iter()
         .enumerate()
         .filter(|(_, task)| task.is_in_taskpad())
         .filter_map(|(i, task)| {
             // We want the query length to be close to the task content length
             let len_diff = (task.content.len() as i64 - query.len() as i64).abs();
-            if len_diff > 3 { // Allow for small differences in length
+            if len_diff > 3 {
+                // Allow for small differences in length
                 return None;
             }
-            
-            matcher.fuzzy_match(&task.content, query)
+
+            matcher
+                .fuzzy_match(&task.content, query)
                 .filter(|&score| score >= min_score)
                 .map(|score| (i, score))
         })
@@ -138,16 +141,19 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
     }
 
     // If no taskpad match, try all tasks
-    tasks.iter()
+    tasks
+        .iter()
         .enumerate()
         .filter_map(|(i, task)| {
             // We want the query length to be close to the task content length
             let len_diff = (task.content.len() as i64 - query.len() as i64).abs();
-            if len_diff > 3 { // Allow for small differences in length
+            if len_diff > 3 {
+                // Allow for small differences in length
                 return None;
             }
-            
-            matcher.fuzzy_match(&task.content, query)
+
+            matcher
+                .fuzzy_match(&task.content, query)
                 .filter(|&score| score >= min_score)
                 .map(|score| (i, score))
         })
@@ -287,10 +293,10 @@ mod tests {
     fn test_load_tasks_nonexistent_file() -> std::io::Result<()> {
         let dir = tempdir()?;
         let file_path = dir.path().join("nonexistent.json");
-        
+
         let tasks = load_tasks(file_path.to_str().unwrap())?;
         assert!(tasks.is_empty());
-        
+
         Ok(())
     }
 }

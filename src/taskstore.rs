@@ -94,40 +94,64 @@ pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
     tasks.iter().position(|task| task.id == id)
 }
 
-/// Finds a task in a slice of tasks by fuzzy matching its content.
+/// Finds a task in a slice of tasks by matching its content.
 /// Prioritizes tasks in the taskpad container over archived tasks.
+/// 
+/// The matching is intentionally strict:
+/// - Returns None for empty queries
+/// - Only matches full content with tolerance for typos
+/// - Case insensitive
 pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
-    use fuzzy_matcher::skim::SkimMatcherV2;
-    use fuzzy_matcher::FuzzyMatcher;
-    let matcher = SkimMatcherV2::default();
-
-    // First try to find a match in taskpad tasks
-    let taskpad_match = tasks
-        .iter()
-        .enumerate()
-        .filter(|(_, task)| task.is_in_taskpad())
-        .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0));
-
-    if let Some((index, task)) = taskpad_match {
-        // Only return a match if it actually matches
-        if let Some(_) = matcher.fuzzy_match(&task.content, query) {
-            return Some(index);
-        }
+    // Return None for empty queries
+    if query.is_empty() {
+        return None;
     }
 
-    // If no taskpad match, look in all tasks
-    tasks
-        .iter()
+    use fuzzy_matcher::skim::SkimMatcherV2;
+    use fuzzy_matcher::FuzzyMatcher;
+    let matcher = SkimMatcherV2::default().ignore_case();
+
+    // Calculate minimum score based on query length - allow roughly 1-2 typos
+    let min_score = query.len() as i64 * 2 - 3;
+
+    // First try taskpad tasks
+    let taskpad_match = tasks.iter()
         .enumerate()
-        .max_by_key(|(_, task)| matcher.fuzzy_match(&task.content, query).unwrap_or(0))
-        .and_then(|(index, task)| {
-            // Only return a match if it actually matches
-            if let Some(_) = matcher.fuzzy_match(&task.content, query) {
-                Some(index)
-            } else {
-                None
+        .filter(|(_, task)| task.is_in_taskpad())
+        .filter_map(|(i, task)| {
+            // We want the query length to be close to the task content length
+            let len_diff = (task.content.len() as i64 - query.len() as i64).abs();
+            if len_diff > 3 { // Allow for small differences in length
+                return None;
             }
+            
+            matcher.fuzzy_match(&task.content, query)
+                .filter(|&score| score >= min_score)
+                .map(|score| (i, score))
         })
+        .max_by_key(|(_, score)| *score)
+        .map(|(i, _)| i);
+
+    if taskpad_match.is_some() {
+        return taskpad_match;
+    }
+
+    // If no taskpad match, try all tasks
+    tasks.iter()
+        .enumerate()
+        .filter_map(|(i, task)| {
+            // We want the query length to be close to the task content length
+            let len_diff = (task.content.len() as i64 - query.len() as i64).abs();
+            if len_diff > 3 { // Allow for small differences in length
+                return None;
+            }
+            
+            matcher.fuzzy_match(&task.content, query)
+                .filter(|&score| score >= min_score)
+                .map(|score| (i, score))
+        })
+        .max_by_key(|(_, score)| *score)
+        .map(|(i, _)| i)
 }
 
 /// Saves the current tasks to a JSON file.
@@ -155,5 +179,117 @@ pub fn load_tasks(path: &str) -> std::io::Result<Vec<Task>> {
         Ok(serde_json::from_str(&json)?)
     } else {
         Ok(Vec::new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn setup_test_tasks() -> Vec<Task> {
+        vec![
+            Task::new(1, "Buy groceries".to_string()),
+            Task::new(2, "Call dentist".to_string()),
+            Task::new(3, "Write report".to_string()),
+        ]
+    }
+
+    #[test]
+    fn test_task_new() {
+        let task = Task::new(1, "Test task".to_string());
+        assert_eq!(task.id, 1);
+        assert_eq!(task.content, "Test task");
+        assert!(matches!(task.container, TaskContainer::Taskpad));
+        assert!(matches!(task.status, TaskStatus::Todo));
+    }
+
+    #[test]
+    fn test_task_complete() {
+        let mut task = Task::new(1, "Test task".to_string());
+        task.complete();
+        assert!(matches!(task.status, TaskStatus::Done));
+        assert!(matches!(task.container, TaskContainer::Archived));
+    }
+
+    #[test]
+    fn test_task_container_methods() {
+        let task = Task::new(1, "Test task".to_string());
+        assert!(task.is_in_taskpad());
+        assert_eq!(task.container(), &TaskContainer::Taskpad);
+    }
+
+    #[test]
+    fn test_task_container_display_names() {
+        assert_eq!(TaskContainer::Taskpad.display_name(), "taskpad");
+        assert_eq!(TaskContainer::Backburner.display_name(), "backburner");
+        assert_eq!(TaskContainer::Shelved.display_name(), "shelved");
+        assert_eq!(TaskContainer::Archived.display_name(), "archived");
+    }
+
+    #[test]
+    fn test_find_task_by_id() {
+        let tasks = setup_test_tasks();
+        assert_eq!(find_task_by_id(&tasks, 1), Some(0));
+        assert_eq!(find_task_by_id(&tasks, 2), Some(1));
+        assert_eq!(find_task_by_id(&tasks, 99), None);
+    }
+
+    #[test]
+    fn test_find_task_by_content_case_insensitive() {
+        let tasks = setup_test_tasks();
+        // Should match exact content with different case
+        assert!(find_task_by_content(&tasks, "BUY GROCERIES").is_some());
+        assert!(find_task_by_content(&tasks, "CALL DENTIST").is_some());
+    }
+
+    #[test]
+    fn test_find_task_by_content_empty_query() {
+        let tasks = setup_test_tasks();
+        assert!(find_task_by_content(&tasks, "").is_none());
+    }
+
+    #[test]
+    fn test_find_task_by_content_prioritizes_taskpad() {
+        let mut tasks = setup_test_tasks();
+        // Create two tasks with similar content, one in taskpad and one archived
+        tasks.push(Task::new(4, "Important meeting".to_string()));
+        let mut archived_task = Task::new(5, "Important meeting".to_string()); // Exact same content
+        archived_task.complete(); // This moves it to archived
+        tasks.push(archived_task);
+
+        // Should find the taskpad task first
+        let found_idx = find_task_by_content(&tasks, "Important meeting").unwrap();
+        assert_eq!(tasks[found_idx].id, 4);
+        assert!(tasks[found_idx].is_in_taskpad());
+    }
+
+    #[test]
+    fn test_save_and_load_tasks() -> std::io::Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("tasks.json");
+        let tasks = setup_test_tasks();
+
+        // Test saving
+        save_tasks(&tasks, file_path.to_str().unwrap())?;
+
+        // Test loading
+        let loaded_tasks = load_tasks(file_path.to_str().unwrap())?;
+        assert_eq!(loaded_tasks.len(), tasks.len());
+        assert_eq!(loaded_tasks[0].id, tasks[0].id);
+        assert_eq!(loaded_tasks[0].content, tasks[0].content);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_tasks_nonexistent_file() -> std::io::Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("nonexistent.json");
+        
+        let tasks = load_tasks(file_path.to_str().unwrap())?;
+        assert!(tasks.is_empty());
+        
+        Ok(())
     }
 }

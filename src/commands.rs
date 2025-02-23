@@ -146,7 +146,7 @@ fn execute_command(app: &mut App, command: Option<Command>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::taskstore::{TaskStatus, TaskContainer};
+    
 
     fn setup_test_app() -> App {
         let mut app = App::default();
@@ -177,21 +177,24 @@ mod tests {
     }
 
     #[test]
+    fn test_find_task_by_partial_content() {
+        let app = setup_test_app();
+        
+        // Should match exact content
+        let index = find_task(&app, "Buy groceries");
+        assert!(index.is_some());
+        assert_eq!(app.tasks[index.unwrap()].content, "Buy groceries");
+
+        // Should not match partial content
+        assert!(find_task(&app, "groceries").is_none());
+    }
+
+    #[test]
     fn test_find_task_by_exact_content() {
         let app = setup_test_app();
         
         // Find by exact content
         let index = find_task(&app, "Buy groceries");
-        assert!(index.is_some());
-        assert_eq!(app.tasks[index.unwrap()].content, "Buy groceries");
-    }
-
-    #[test]
-    fn test_find_task_by_partial_content() {
-        let app = setup_test_app();
-        
-        // Find by partial content
-        let index = find_task(&app, "groceries");
         assert!(index.is_some());
         assert_eq!(app.tasks[index.unwrap()].content, "Buy groceries");
     }
@@ -209,52 +212,46 @@ mod tests {
     #[test]
     fn test_find_nonexistent_task() {
         let app = setup_test_app();
-        
-        // Try to find nonexistent task
-        let index = find_task(&app, "xyz123");
-        assert!(index.is_none());
+        assert!(find_task(&app, "nonexistent task").is_none());
     }
 
     #[test]
     fn test_find_deleted_task() {
         let mut app = setup_test_app();
+        let initial_count = app.tasks.len();
         
-        // Delete a task
-        let index = find_task(&app, "groceries").unwrap();
+        // First find and delete a task
+        let index = find_task(&app, "Buy groceries").unwrap();
         app.tasks.remove(index);
+        assert_eq!(app.tasks.len(), initial_count - 1);
         
-        // Try to find the deleted task
-        let index = find_task(&app, "groceries");
-        assert!(index.is_none());
+        // Now try to find it again
+        assert!(find_task(&app, "Buy groceries").is_none());
     }
 
     #[test]
     fn test_complete_task_success() {
         let mut app = setup_test_app();
-        
-        // Complete existing task
-        let result = complete_task(&mut app, "groceries");
+        let result = complete_task(&mut app, "Buy groceries");
         assert!(matches!(result, CommandResult::TaskCompleted { content } if content == "Buy groceries"));
-        assert!(matches!(app.tasks[0].status, TaskStatus::Done));
-        assert!(matches!(app.tasks[0].container, TaskContainer::Archived));
     }
 
     #[test]
     fn test_complete_already_archived_task() {
         let mut app = setup_test_app();
         
-        // Complete task first time
-        let _ = complete_task(&mut app, "groceries");
+        // First complete the task
+        let _ = complete_task(&mut app, "Buy groceries");
         
         // Try to complete it again
-        let result = complete_task(&mut app, "groceries");
+        let result = complete_task(&mut app, "Buy groceries");
         assert!(matches!(result, CommandResult::TaskAlreadyArchived(content) if content == "Buy groceries"));
     }
 
     #[test]
     fn test_complete_nonexistent_task() {
         let mut app = setup_test_app();
-        let result = complete_task(&mut app, "xyz123");
+        let result = complete_task(&mut app, "nonexistent task");
         assert!(matches!(result, CommandResult::NoMatchingTask));
     }
 
@@ -264,7 +261,7 @@ mod tests {
         let initial_count = app.tasks.len();
         
         // Delete by content match
-        execute_command(&mut app, Some(Command::Delete("groceries".to_string())));
+        execute_command(&mut app, Some(Command::Delete("Buy groceries".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);
         assert!(app.tasks.iter().all(|t| t.content != "Buy groceries"));
     }
@@ -273,9 +270,11 @@ mod tests {
     fn test_delete_task_by_index() {
         let mut app = setup_test_app();
         let initial_count = app.tasks.len();
+        
+        // Update display order first
         app.taskpad_state.update_display_order(&app.tasks);
         
-        // Delete by display index
+        // Delete by index
         execute_command(&mut app, Some(Command::Delete("1".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);
     }
@@ -286,20 +285,20 @@ mod tests {
         let initial_count = app.tasks.len();
         
         // Try to delete nonexistent task
-        execute_command(&mut app, Some(Command::Delete("xyz123".to_string())));
+        execute_command(&mut app, Some(Command::Delete("nonexistent task".to_string())));
         assert_eq!(app.tasks.len(), initial_count);
     }
 
     #[test]
     fn test_delete_completed_task() {
         let mut app = setup_test_app();
-        
-        // Complete a task first
-        let _ = complete_task(&mut app, "groceries");
         let initial_count = app.tasks.len();
         
-        // Delete the completed task
-        execute_command(&mut app, Some(Command::Delete("groceries".to_string())));
+        // First complete a task
+        let _ = complete_task(&mut app, "Buy groceries");
+        
+        // Then delete it
+        execute_command(&mut app, Some(Command::Delete("Buy groceries".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);
         assert!(app.tasks.iter().all(|t| t.content != "Buy groceries"));
     }

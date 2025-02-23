@@ -1,0 +1,79 @@
+cyberorganism: system architecture overview
+
+Core Components
+--------------
+Tasks are the primary data unit in the system. Each task has a unique identifier and content, plus metadata tracking its lifecycle state and location within the system. Tasks exist in one of four containers:
+- Taskpad: Active tasks requiring attention
+- Backburner: Tasks organized into projects/areas
+- Shelved: Tasks deferred for future consideration  
+- Archived: Completed tasks
+
+Key Interfaces
+-------------
+Task Operations:
+- Task::new(): Creates tasks with default state (Taskpad container, Todo status)
+- Task::complete(): Marks task as done and moves to Archive
+- Task::container(): Gets the current container of a task
+- find_task_by_id(): Exact task lookup by ID
+- find_task_by_content(): Fuzzy task lookup, prioritizing Taskpad
+
+Display Management:
+- TaskpadState::update_display_order(): Updates display after container changes
+- TaskpadState::get_task_id(): Maps display index to task ID
+- TaskpadState::get_display_index(): Maps task ID to display index
+
+System Control:
+- App::new(): Initializes system state
+- App::log_activity(): Records user feedback
+- save_tasks(): Persists tasks to storage
+- load_tasks(): Rehydrates tasks from storage
+
+Command Processing:
+- handle_input_event(): Entry point for all keyboard events
+- find_task(): Unified task lookup by index or content
+- execute_command(): Processes commands and updates state
+
+Debug Logging:
+- log_debug(): Writes debug info to debug.log (temporary implementation, needs cleanup)
+
+Data Pipeline
+------------
+1. Input Processing
+   - Raw keyboard input captured in alternate screen mode
+   - Input parsed into commands:
+     * Default: Create new task
+     * "complete": Archive task
+     * "delete": Remove task
+     * "move to <container>": Change task location
+   - Commands validated and transformed into task operations
+
+2. Task State Management
+   - New tasks enter Taskpad container
+   - Tasks can move between containers
+   - State changes trigger:
+     * Persistence updates
+     * Display order recalculation
+     * User feedback messages
+
+3. Display Updates
+   - TaskpadState maintains numbered task list
+   - Only active container tasks shown
+   - Long tasks truncated to fit display
+   - Real-time feedback via activity log
+
+Command Processing
+----------------
+The system uses a text-based command interface. Commands are parsed from user input and processed through a state machine that validates the operation and updates relevant system components. Tasks can be identified in two ways:
+
+1. Display Index: Tasks in the taskpad are numbered sequentially (1, 2, 3...). These indices are dynamically assigned based on display order and are only valid for tasks currently visible in the taskpad.
+
+2. Content Match: Tasks can be found by matching their content text. While this searches across all containers, it prioritizes matches in the taskpad. The matching uses a strict similarity threshold that acts more like spellcheck than fuzzy search, helping prevent accidental matches.
+
+The command processor provides immediate feedback through the activity log.
+
+Useful terminal commands:
+-cargo build
+-cargo run
+-cargo test
+-cargo clippy -- -W clippy::pedantic -W clippy::nursery
+-cargo fmt

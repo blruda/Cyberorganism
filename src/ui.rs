@@ -283,3 +283,82 @@ pub fn draw(frame: &mut Frame, app: &App) {
     // Set cursor position accounting for borders
     frame.set_cursor(input_chunk.x + 1 + cursor_x, input_chunk.y + 1 + cursor_y);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::taskstore::{TaskContainer, TaskStatus};
+    use chrono::Utc;
+
+    #[test]
+    fn test_taskpad_display_order() {
+        let mut state = TaskpadState::new();
+        let now = Utc::now();
+        let tasks = vec![
+            Task {
+                id: 1,
+                content: "Task 1".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: now,
+                status: TaskStatus::Todo,
+            },
+            Task {
+                id: 2,
+                content: "Task 2".to_string(),
+                container: TaskContainer::Archived,
+                created_at: now,
+                status: TaskStatus::Done,
+            },
+            Task {
+                id: 3,
+                content: "Task 3".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: now,
+                status: TaskStatus::Todo,
+            },
+        ];
+
+        state.update_display_order(&tasks);
+
+        // Only taskpad tasks should be in display order
+        assert_eq!(state.get_display_index(1), Some(1));
+        assert_eq!(state.get_display_index(2), None); // Archived task
+        assert_eq!(state.get_display_index(3), Some(2));
+
+        // Test reverse lookup
+        assert_eq!(state.get_task_id(1), Some(1));
+        assert_eq!(state.get_task_id(2), Some(3));
+        assert_eq!(state.get_task_id(3), None); // Invalid index
+    }
+
+    #[test]
+    fn test_taskpad_empty() {
+        let mut state = TaskpadState::new();
+        let tasks: Vec<Task> = vec![];
+
+        state.update_display_order(&tasks);
+
+        assert_eq!(state.get_task_id(1), None);
+        assert_eq!(state.get_display_index(1), None);
+    }
+
+    #[test]
+    fn test_activity_log() {
+        let mut log = ActivityLog::new();
+        
+        // Test empty log
+        assert_eq!(log.latest_message(), None);
+        
+        // Test single message
+        log.add_message("First message".to_string());
+        assert_eq!(log.latest_message(), Some("First message"));
+        
+        // Test message limit
+        for i in 0..20 {
+            log.add_message(format!("Message {}", i));
+        }
+        
+        // Should keep the most recent message
+        assert_eq!(log.latest_message(), Some("Message 19"));
+    }
+}

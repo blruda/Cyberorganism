@@ -103,8 +103,8 @@ pub fn handle_input_event(app: &mut App, event: Event) {
     }
 }
 
-fn execute_create_command(app: &mut App, content: String) {
-    let task = Task::new(app.next_id, content.clone());
+fn execute_create_command(app: &mut App, content: &str) {
+    let task = Task::new(app.next_id, content.to_string());
     app.next_id += 1;
     app.tasks.push(task);
     app.log_activity(format!("Created task: {content}"));
@@ -148,12 +148,15 @@ fn execute_move_command(app: &mut App, query: &str, target_container: TaskContai
     if let Some(index) = find_task(app, query) {
         let task = &mut app.tasks[index];
         if task.container == target_container {
-            app.log_activity(format!("Task already in {}", target_container.display_name()));
+            app.log_activity(format!(
+                "Task already in {}",
+                target_container.display_name()
+            ));
         } else {
             let content = task.content.clone();
             let container_name = target_container.display_name();
             task.container = target_container;
-            app.log_activity(format!("Moved to {}: {}", container_name, content));
+            app.log_activity(format!("Moved to {container_name}: {content}"));
 
             // Save tasks after moving one
             if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
@@ -180,7 +183,7 @@ fn execute_move_to_shelved_command(app: &mut App, query: &str) {
 /// Executes a command, updating the app state as needed
 fn execute_command(app: &mut App, command: Option<Command>) {
     match command {
-        Some(Command::Create(content)) => execute_create_command(app, content),
+        Some(Command::Create(content)) => execute_create_command(app, &content),
         Some(Command::Complete(query)) => execute_complete_command(app, &query),
         Some(Command::Delete(query)) => execute_delete_command(app, &query),
         Some(Command::MoveToTaskpad(query)) => execute_move_to_taskpad_command(app, &query),
@@ -486,7 +489,7 @@ mod tests {
     #[test]
     fn test_move_nonexistent_task() {
         let mut app = setup_test_app();
-        
+
         execute_move_to_taskpad_command(&mut app, "Nonexistent task");
         assert_eq!(
             app.activity_log.latest_message().unwrap(),

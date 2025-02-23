@@ -85,6 +85,10 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
+/// Manages the main event loop of the application.
+///
+/// This function will loop until it sees an escape key or control-c.
+/// It will then return, and the application will exit.
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,

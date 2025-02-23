@@ -12,6 +12,9 @@ enum Command {
     Create(String),
     Complete(String),
     Delete(String),
+    MoveToTaskpad(String),
+    MoveToBackburner(String),
+    MoveToShelved(String),
 }
 
 /// Parses the input string into a Command
@@ -21,6 +24,12 @@ fn parse_command(input: String) -> Command {
         Command::Complete(task_query.to_string())
     } else if let Some(task_query) = input.strip_prefix("delete ") {
         Command::Delete(task_query.to_string())
+    } else if let Some(task_query) = input.strip_prefix("move to taskpad ") {
+        Command::MoveToTaskpad(task_query.to_string())
+    } else if let Some(task_query) = input.strip_prefix("move to backburner ") {
+        Command::MoveToBackburner(task_query.to_string())
+    } else if let Some(task_query) = input.strip_prefix("move to shelved ") {
+        Command::MoveToShelved(task_query.to_string())
     } else {
         Command::Create(input)
     }
@@ -94,45 +103,89 @@ pub fn handle_input_event(app: &mut App, event: Event) {
     }
 }
 
-/// Executes a command, updating the app state as needed
-fn execute_command(app: &mut App, command: Option<Command>) {
-    match command {
-        Some(Command::Create(content)) => {
-            let task = Task::new(app.next_id, content.clone());
-            app.next_id += 1;
-            app.tasks.push(task);
-            app.log_activity(format!("Created task: {content}"));
+fn execute_create_command(app: &mut App, content: String) {
+    let task = Task::new(app.next_id, content.clone());
+    app.next_id += 1;
+    app.tasks.push(task);
+    app.log_activity(format!("Created task: {content}"));
 
-            // Save tasks after creating a new one
+    // Save tasks after creating a new one
+    if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
+        log_debug(&format!("Failed to save tasks: {e}"));
+    }
+}
+
+fn execute_complete_command(app: &mut App, query: &str) {
+    match complete_task(app, query) {
+        CommandResult::TaskCompleted { content } => {
+            app.log_activity(format!("Completed task: {content}"));
+        }
+        CommandResult::TaskAlreadyArchived(content) => {
+            app.log_activity(format!("Task '{content}' is already archived"));
+        }
+        CommandResult::NoMatchingTask => {
+            app.log_activity("No matching task found".to_string());
+        }
+    }
+}
+
+fn execute_delete_command(app: &mut App, query: &str) {
+    if let Some(index) = find_task(app, query) {
+        let content = app.tasks[index].content.clone();
+        app.tasks.remove(index);
+        app.log_activity(format!("Deleted task: {content}"));
+
+        // Save tasks after deleting one
+        if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
+            log_debug(&format!("Failed to save tasks: {e}"));
+        }
+    } else {
+        app.log_activity("No matching task found".to_string());
+    }
+}
+
+fn execute_move_command(app: &mut App, query: &str, target_container: TaskContainer) {
+    if let Some(index) = find_task(app, query) {
+        let task = &mut app.tasks[index];
+        if task.container == target_container {
+            app.log_activity(format!("Task already in {}", target_container.display_name()));
+        } else {
+            let content = task.content.clone();
+            let container_name = target_container.display_name();
+            task.container = target_container;
+            app.log_activity(format!("Moved to {}: {}", container_name, content));
+
+            // Save tasks after moving one
             if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
                 log_debug(&format!("Failed to save tasks: {e}"));
             }
         }
-        Some(Command::Complete(query)) => match complete_task(app, &query) {
-            CommandResult::TaskCompleted { content } => {
-                app.log_activity(format!("Completed task: {content}"));
-            }
-            CommandResult::TaskAlreadyArchived(content) => {
-                app.log_activity(format!("Task '{content}' is already archived"));
-            }
-            CommandResult::NoMatchingTask => {
-                app.log_activity("No matching task found".to_string());
-            }
-        },
-        Some(Command::Delete(query)) => {
-            if let Some(index) = find_task(app, &query) {
-                let content = app.tasks[index].content.clone();
-                app.tasks.remove(index);
-                app.log_activity(format!("Deleted task: {content}"));
+    } else {
+        app.log_activity("No matching task found".to_string());
+    }
+}
 
-                // Save tasks after deleting one
-                if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
-                    log_debug(&format!("Failed to save tasks: {e}"));
-                }
-            } else {
-                app.log_activity("No matching task found".to_string());
-            }
-        }
+fn execute_move_to_taskpad_command(app: &mut App, query: &str) {
+    execute_move_command(app, query, TaskContainer::Taskpad);
+}
+
+fn execute_move_to_backburner_command(app: &mut App, query: &str) {
+    execute_move_command(app, query, TaskContainer::Backburner);
+}
+
+fn execute_move_to_shelved_command(app: &mut App, query: &str) {
+    execute_move_command(app, query, TaskContainer::Shelved);
+}
+
+/// Executes a command, updating the app state as needed
+fn execute_command(app: &mut App, command: Option<Command>) {
+    match command {
+        Some(Command::Create(content)) => execute_create_command(app, content),
+        Some(Command::Complete(query)) => execute_complete_command(app, &query),
+        Some(Command::Delete(query)) => execute_delete_command(app, &query),
+        Some(Command::MoveToTaskpad(query)) => execute_move_to_taskpad_command(app, &query),
+        Some(Command::MoveToBackburner(query)) => execute_move_to_backburner_command(app, &query),
+        Some(Command::MoveToShelved(query)) => execute_move_to_shelved_command(app, &query),
         None => {
             app.log_activity("Invalid command".to_string());
         }
@@ -147,6 +200,12 @@ fn execute_command(app: &mut App, command: Option<Command>) {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    /// Test utilities and conventions:
+    /// - When checking activity log messages, always use `activity_log.latest_message()`
+    ///   instead of trying to access the log entries directly. The ActivityLog struct
+    ///   provides this method specifically for getting the most recent message.
+    /// - Container names in messages are always lowercase (e.g., "taskpad" not "Taskpad")
 
     fn setup_test_app() -> App {
         let temp_dir = tempdir().expect("Failed to create temp directory");
@@ -179,6 +238,18 @@ mod tests {
         // Test delete command
         let cmd = parse_command("delete Test task".to_string());
         assert!(matches!(cmd, Command::Delete(content) if content == "Test task"));
+
+        // Test move to taskpad command
+        let cmd = parse_command("move to taskpad Test task".to_string());
+        assert!(matches!(cmd, Command::MoveToTaskpad(content) if content == "Test task"));
+
+        // Test move to backburner command
+        let cmd = parse_command("move to backburner Test task".to_string());
+        assert!(matches!(cmd, Command::MoveToBackburner(content) if content == "Test task"));
+
+        // Test move to shelved command
+        let cmd = parse_command("move to shelved Test task".to_string());
+        assert!(matches!(cmd, Command::MoveToShelved(content) if content == "Test task"));
 
         // Test with trailing spaces in task content
         let cmd = parse_command("complete Test task  ".to_string());
@@ -317,5 +388,121 @@ mod tests {
         execute_command(&mut app, Some(Command::Delete("Buy groceries".to_string())));
         assert_eq!(app.tasks.len(), initial_count - 1);
         assert!(app.tasks.iter().all(|t| t.content != "Buy groceries"));
+    }
+
+    #[test]
+    fn test_move_to_taskpad_success() {
+        let mut app = setup_test_app();
+        let task = &mut app.tasks[0];
+        task.container = TaskContainer::Backburner;
+        let content = task.content.clone();
+
+        execute_move_to_taskpad_command(&mut app, &content);
+
+        assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            &format!("Moved to taskpad: {}", content)
+        );
+    }
+
+    #[test]
+    fn test_move_to_taskpad_already_there() {
+        let mut app = setup_test_app();
+        let task = &app.tasks[0];
+        let content = task.content.clone();
+
+        execute_move_to_taskpad_command(&mut app, &content);
+
+        assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            "Task already in taskpad"
+        );
+    }
+
+    #[test]
+    fn test_move_to_backburner_success() {
+        let mut app = setup_test_app();
+        let task = &app.tasks[0];
+        let content = task.content.clone();
+
+        execute_move_to_backburner_command(&mut app, &content);
+
+        assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            &format!("Moved to backburner: {}", content)
+        );
+    }
+
+    #[test]
+    fn test_move_to_backburner_already_there() {
+        let mut app = setup_test_app();
+        let task = &mut app.tasks[0];
+        task.container = TaskContainer::Backburner;
+        let content = task.content.clone();
+
+        execute_move_to_backburner_command(&mut app, &content);
+
+        assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            "Task already in backburner"
+        );
+    }
+
+    #[test]
+    fn test_move_to_shelved_success() {
+        let mut app = setup_test_app();
+        let task = &app.tasks[0];
+        let content = task.content.clone();
+
+        execute_move_to_shelved_command(&mut app, &content);
+
+        assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            &format!("Moved to shelved: {}", content)
+        );
+    }
+
+    #[test]
+    fn test_move_to_shelved_already_there() {
+        let mut app = setup_test_app();
+        let task = &mut app.tasks[0];
+        task.container = TaskContainer::Shelved;
+        let content = task.content.clone();
+
+        execute_move_to_shelved_command(&mut app, &content);
+
+        assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            "Task already in shelved"
+        );
+    }
+
+    #[test]
+    fn test_move_nonexistent_task() {
+        let mut app = setup_test_app();
+        
+        execute_move_to_taskpad_command(&mut app, "Nonexistent task");
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            "No matching task found"
+        );
+
+        execute_move_to_backburner_command(&mut app, "Nonexistent task");
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            "No matching task found"
+        );
+
+        execute_move_to_shelved_command(&mut app, "Nonexistent task");
+        assert_eq!(
+            app.activity_log.latest_message().unwrap(),
+            "No matching task found"
+        );
     }
 }

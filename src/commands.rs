@@ -280,31 +280,44 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                 if key_event.code == KeyCode::Enter {
                     let input = app.taskpad_state.input_value().to_string();
                     if !input.is_empty() {
-                        let command = if is_ctrl_enter_pressed() && app.taskpad_state.focused_index.is_some() {
-                            // Complete the focused task
-                            Some(Command::Complete(input))
+                        let commands = if is_ctrl_enter_pressed() && app.taskpad_state.focused_index.is_some() {
+                            match app.taskpad_state.focused_index {
+                                Some(0) => vec![Command::Complete(input)],
+                                Some(idx) => {
+                                    // At existing task - edit and complete
+                                    if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
+                                        vec![
+                                            Command::Edit(task_id, input.clone()),
+                                            Command::Complete(input)
+                                        ]
+                                    } else {
+                                        vec![]
+                                    }
+                                }
+                                None => vec![Command::Complete(input)]
+                            }
                         } else {
                             match app.taskpad_state.focused_index {
                                 Some(0) => {
                                     // At "Create new task" - parse as normal command
-                                    Some(parse_command(input))
+                                    vec![parse_command(input)]
                                 }
                                 Some(idx) => {
                                     // At existing task - create edit command
                                     if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
-                                        Some(Command::Edit(task_id, input))
+                                        vec![Command::Edit(task_id, input)]
                                     } else {
-                                        None
+                                        vec![]
                                     }
                                 }
                                 None => {
                                     // No focus - parse as normal command
-                                    Some(parse_command(input))
+                                    vec![parse_command(input)]
                                 }
                             }
                         };
                         
-                        if let Some(cmd) = command {
+                        for cmd in commands {
                             match cmd {
                                 Command::Edit(_, _) => {
                                     // For edits, keep the input buffer and focus

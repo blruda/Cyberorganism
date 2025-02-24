@@ -13,12 +13,9 @@ use ratatui::Terminal;
 use std::io;
 use std::time::Duration;
 use taskstore::{load_tasks, Task};
-use tui_input::Input;
 
 /// Represents the current state of the application
 pub struct App {
-    /// Input field for entering commands
-    pub input: Input,
     /// List of all tasks
     pub tasks: Vec<Task>,
     /// Next available task ID
@@ -44,7 +41,6 @@ impl App {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            input: Input::default(),
             tasks: Vec::new(),
             next_id: 1,
             tasks_file: "tasks.json".to_string(),

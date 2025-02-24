@@ -14,8 +14,9 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 use std::io;
+use tui_input::Input;
 
-use crate::{debug::log_debug, taskstore::Task, App};
+use crate::{taskstore::Task, App};
 
 /// Initializes the terminal for TUI operation.
 ///
@@ -56,9 +57,11 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
 #[derive(Debug)]
 pub struct TaskpadState {
     /// Maps display positions to task IDs
-    display_to_id: Vec<u32>,
+    pub display_to_id: Vec<u32>,
     /// Currently focused task index (0-based)
     pub focused_index: Option<usize>,
+    /// Input field for entering commands
+    input: Input,
 }
 
 impl Default for TaskpadState {
@@ -72,6 +75,7 @@ impl TaskpadState {
         Self {
             display_to_id: Vec::new(),
             focused_index: Some(0),  // Start focused on "Create new task"
+            input: Input::default(),
         }
     }
 
@@ -85,13 +89,14 @@ impl TaskpadState {
             .filter(|task| task.is_in_taskpad())
             .map(|task| task.id)
             .collect();
+            
         // Reset focus to 0 if it's beyond the new list length
         if let Some(current) = self.focused_index {
             if current > self.display_to_id.len() {
                 self.focused_index = Some(0);
+                self.input.reset();
             }
         }
-        log_debug(&format!("Updated display order: {:?}", self.display_to_id));
     }
 
     /// Gets a task ID from a 1-based display index.
@@ -160,6 +165,36 @@ impl TaskpadState {
             }
             _ => None,
         }
+    }
+
+    // Input buffer methods - no event handling, just state management
+    pub fn input_value(&self) -> &str {
+        self.input.value()
+    }
+
+    pub fn input_cursor(&self) -> usize {
+        self.input.cursor()
+    }
+
+    pub fn reset_input(&mut self) {
+        self.input.reset();
+    }
+
+    pub fn set_input(&mut self, content: &str) {
+        self.input = Input::new(content.to_string());
+    }
+
+    pub fn update_input_for_focus(&mut self, tasks: &[Task]) {
+        match self.focused_index {
+            Some(0) => self.input.reset(),
+            _ => if let Some(content) = self.get_focused_task_content(tasks) {
+                self.input = Input::new(content.to_string());
+            }
+        }
+    }
+
+    pub fn get_input_mut(&mut self) -> &mut Input {
+        &mut self.input
     }
 }
 
@@ -374,7 +409,7 @@ const fn calculate_cursor_position(cursor_pos: usize, available_width: usize) ->
 pub fn draw(frame: &mut Frame, app: &App) {
     let available_width = calculate_available_width(frame.size());
     let (input_lines, input_height) =
-        calculate_input_dimensions(app.input.value(), app.input.cursor(), available_width);
+        calculate_input_dimensions(app.taskpad_state.input_value(), app.taskpad_state.input_cursor(), available_width);
 
     let constraints = create_layout_constraints(input_height, app.show_help);
     let chunks = Layout::default()
@@ -405,7 +440,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     frame.render_widget(input_widget, input_chunk);
 
     // Set cursor position
-    let (cursor_x, cursor_y) = calculate_cursor_position(app.input.cursor(), available_width);
+    let (cursor_x, cursor_y) = calculate_cursor_position(app.taskpad_state.input_cursor(), available_width);
     frame.set_cursor(input_chunk.x + 1 + cursor_x, input_chunk.y + 1 + cursor_y);
 }
 

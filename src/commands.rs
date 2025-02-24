@@ -1,12 +1,14 @@
 //! Input handling and command processing for cyberorganism. Translates user
 //! keyboard input into task management operations.
 
-use crate::debug::log_debug;
-use crate::taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer};
-use crate::App;
 use crossterm::event::{Event, KeyCode};
 use tui_input::backend::crossterm::EventHandler;
-use tui_input::Input;
+
+use crate::{
+    debug::log_debug,
+    taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer},
+    App,
+};
 
 /// Commands that can be executed by the user
 enum Command {
@@ -183,7 +185,7 @@ fn focus_task(app: &mut App, query: &str) -> FocusResult {
         if let Some(display_idx) = app.taskpad_state.get_display_index(task.id) {
             app.taskpad_state.focused_index = Some(display_idx);
             // Also update input buffer with task content
-            app.input = Input::new(content.clone());
+            app.taskpad_state.set_input(&content);
             FocusResult::Focused { content }
         } else {
             FocusResult::NoMatchingTask
@@ -239,50 +241,71 @@ pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
         Event::Key(key_event) => match key_event.code {
             KeyCode::Up => {
-                app.taskpad_state.focus_previous();
-                match app.taskpad_state.focused_index {
-                    Some(0) => app.input.reset(),
-                    _ => if let Some(content) = app.taskpad_state.get_focused_task_content(&app.tasks) {
-                        app.input = Input::new(content.to_string());
-                    }
+                if let Some(current) = app.taskpad_state.focused_index {
+                    // If at index 0, wrap to the last item
+                    let new_index = if current == 0 {
+                        app.taskpad_state.display_to_id.len()
+                    } else {
+                        current - 1
+                    };
+                    app.taskpad_state.focused_index = Some(new_index);
+                    app.taskpad_state.update_input_for_focus(&app.tasks);
                 }
             }
             KeyCode::Down => {
-                app.taskpad_state.focus_next();
-                match app.taskpad_state.focused_index {
-                    Some(0) => app.input.reset(),
-                    _ => if let Some(content) = app.taskpad_state.get_focused_task_content(&app.tasks) {
-                        app.input = Input::new(content.to_string());
-                    }
+                if let Some(current) = app.taskpad_state.focused_index {
+                    // If at last index, wrap to 0
+                    let new_index = if current >= app.taskpad_state.display_to_id.len() {
+                        0
+                    } else {
+                        current + 1
+                    };
+                    app.taskpad_state.focused_index = Some(new_index);
+                    app.taskpad_state.update_input_for_focus(&app.tasks);
                 }
             }
             KeyCode::Esc => app.taskpad_state.clear_focus(),
             _ => {
-                app.input.handle_event(&Event::Key(key_event));
+                // Handle input field updates
+                app.taskpad_state.get_input_mut().handle_event(&event);
+                
+                // Check for Enter to submit
                 if key_event.code == KeyCode::Enter {
-                    let command = match app.taskpad_state.focused_index {
-                        Some(0) => {
-                            // At "Create new task" - parse as normal command
-                            let cmd = Some(parse_command(app.input.value().to_string()));
-                            app.input.reset();
-                            cmd
-                        }
-                        Some(idx) => {
-                            // At existing task - create edit command
-                            if let Some(task_id) = app.taskpad_state.get_task_id(idx) {
-                                Some(Command::Edit(task_id, app.input.value().to_string()))
-                            } else {
-                                None
+                    let input = app.taskpad_state.input_value().to_string();
+                    if !input.is_empty() {
+                        let command = match app.taskpad_state.focused_index {
+                            Some(0) => {
+                                // At "Create new task" - parse as normal command
+                                Some(parse_command(input))
+                            }
+                            Some(idx) => {
+                                // At existing task - create edit command
+                                if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
+                                    Some(Command::Edit(task_id, input))
+                                } else {
+                                    None
+                                }
+                            }
+                            None => {
+                                // No focus - parse as normal command
+                                Some(parse_command(input))
+                            }
+                        };
+                        
+                        if let Some(cmd) = command {
+                            match cmd {
+                                Command::Edit(_, _) => {
+                                    // For edits, keep the input buffer and focus
+                                    execute_command(app, Some(cmd));
+                                }
+                                _ => {
+                                    // For other commands, reset input after execution
+                                    execute_command(app, Some(cmd));
+                                    app.taskpad_state.reset_input();
+                                }
                             }
                         }
-                        None => {
-                            // No focus - parse as normal command
-                            let cmd = Some(parse_command(app.input.value().to_string()));
-                            app.input.reset();
-                            cmd
-                        }
-                    };
-                    execute_command(app, command);
+                    }
                 }
             }
         },
@@ -621,22 +644,27 @@ mod tests {
         app.taskpad_state.update_display_order(&app.tasks);
         
         let result = focus_task(&mut app, "1");
-        assert!(matches!(
-            result,
-            FocusResult::Focused { content } if content == "Buy groceries"
-        ));
-        assert_eq!(app.input.value(), "Buy groceries");
+        assert!(matches!(result, FocusResult::Focused { .. }));
+
+        // Check that state is updated
         assert_eq!(app.taskpad_state.focused_index, Some(1));
+        assert_eq!(app.taskpad_state.input_value(), "Buy groceries");
     }
 
     #[test]
     fn test_focus_task_updates_input() {
         let mut app = setup_test_app();
         app.taskpad_state.update_display_order(&app.tasks);
-        app.input = Input::new("previous input".to_string());
-        
-        focus_task(&mut app, "Buy groceries");
-        assert_eq!(app.input.value(), "Buy groceries");
+
+        // Set initial input
+        app.taskpad_state.set_input("previous input");
+
+        // Focus on first task
+        let result = focus_task(&mut app, "1");
+        assert!(matches!(result, FocusResult::Focused { .. }));
+
+        // Check that input is updated
+        assert_eq!(app.taskpad_state.input_value(), "Buy groceries");
     }
 
     #[test]

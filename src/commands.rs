@@ -15,6 +15,7 @@ use crate::{
 enum Command {
     Create(String),
     Complete(String),
+    CompleteById(u32),
     Delete(String),
     MoveToTaskpad(String),
     MoveToBackburner(String),
@@ -67,23 +68,32 @@ fn find_task(app: &App, query: &str) -> Option<usize> {
     find_task_by_content(&app.tasks, query)
 }
 
-/// Completes a task by content match
-fn complete_task(app: &mut App, query: &str) -> CommandResult {
-    if let Some(index) = find_task(app, query) {
-        let task = &mut app.tasks[index];
-        if matches!(task.container(), TaskContainer::Archived) {
-            CommandResult::TaskAlreadyArchived(task.content.clone())
-        } else {
+/// Completes a task by content match or task ID
+fn complete_task(app: &mut App, query: &str, task_id: Option<u32>) -> CommandResult {
+    // If task_id is provided, complete that task directly
+    if let Some(id) = task_id {
+        if let Some(task) = app.tasks.iter_mut().find(|t| t.id == id) {
+            if matches!(task.container(), TaskContainer::Archived) {
+                return CommandResult::TaskAlreadyArchived(task.content.clone());
+            }
             let content = task.content.clone();
             task.complete();
-
-            // Save tasks after completing one
-            if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
-                log_debug(&format!("Failed to save tasks: {e}"));
-            }
-
-            CommandResult::TaskCompleted { content }
+            app.taskpad_state.update_display_order(&app.tasks);
+            return CommandResult::TaskCompleted { content };
         }
+        return CommandResult::NoMatchingTask;
+    }
+
+    // Otherwise, search for task by content
+    if let Some(idx) = find_task(app, query) {
+        let task = &mut app.tasks[idx];
+        if matches!(task.container(), TaskContainer::Archived) {
+            return CommandResult::TaskAlreadyArchived(task.content.clone());
+        }
+        let content = task.content.clone();
+        task.complete();
+        app.taskpad_state.update_display_order(&app.tasks);
+        CommandResult::TaskCompleted { content }
     } else {
         CommandResult::NoMatchingTask
     }
@@ -102,7 +112,22 @@ fn execute_create_command(app: &mut App, content: &str) {
 
 /// Execute a complete command
 fn execute_complete_command(app: &mut App, query: &str) {
-    match complete_task(app, query) {
+    match complete_task(app, query, None) {
+        CommandResult::TaskCompleted { content } => {
+            app.log_activity(format!("Completed task: {content}"));
+        }
+        CommandResult::TaskAlreadyArchived(content) => {
+            app.log_activity(format!("Task '{content}' is already archived"));
+        }
+        CommandResult::NoMatchingTask => {
+            app.log_activity("No matching task found".to_string());
+        }
+    }
+}
+
+/// Execute a complete by ID command
+fn execute_complete_by_id_command(app: &mut App, task_id: u32) {
+    match complete_task(app, "", Some(task_id)) {
         CommandResult::TaskCompleted { content } => {
             app.log_activity(format!("Completed task: {content}"));
         }
@@ -213,6 +238,7 @@ fn execute_command(app: &mut App, command: Option<Command>) {
     match command {
         Some(Command::Create(content)) => execute_create_command(app, &content),
         Some(Command::Complete(query)) => execute_complete_command(app, &query),
+        Some(Command::CompleteById(task_id)) => execute_complete_by_id_command(app, task_id),
         Some(Command::Delete(query)) => execute_delete_command(app, &query),
         Some(Command::MoveToTaskpad(query)) => execute_move_to_taskpad_command(app, &query),
         Some(Command::MoveToBackburner(query)) => execute_move_to_backburner_command(app, &query),
@@ -288,7 +314,7 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                                     if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
                                         vec![
                                             Command::Edit(task_id, input.clone()),
-                                            Command::Complete(input)
+                                            Command::CompleteById(task_id)
                                         ]
                                     } else {
                                         vec![]
@@ -457,7 +483,7 @@ mod tests {
     #[test]
     fn test_complete_task_success() {
         let mut app = setup_test_app();
-        let result = complete_task(&mut app, "Buy groceries");
+        let result = complete_task(&mut app, "Buy groceries", None);
         assert!(
             matches!(result, CommandResult::TaskCompleted { content } if content == "Buy groceries")
         );
@@ -468,10 +494,10 @@ mod tests {
         let mut app = setup_test_app();
 
         // First complete the task
-        let _ = complete_task(&mut app, "Buy groceries");
+        let _ = complete_task(&mut app, "Buy groceries", None);
 
         // Try to complete it again
-        let result = complete_task(&mut app, "Buy groceries");
+        let result = complete_task(&mut app, "Buy groceries", None);
         assert!(
             matches!(result, CommandResult::TaskAlreadyArchived(content) if content == "Buy groceries")
         );
@@ -480,7 +506,7 @@ mod tests {
     #[test]
     fn test_complete_nonexistent_task() {
         let mut app = setup_test_app();
-        let result = complete_task(&mut app, "nonexistent task");
+        let result = complete_task(&mut app, "nonexistent task", None);
         assert!(matches!(result, CommandResult::NoMatchingTask));
     }
 
@@ -527,7 +553,7 @@ mod tests {
         let initial_count = app.tasks.len();
 
         // First complete a task
-        let _ = complete_task(&mut app, "Buy groceries");
+        let _ = complete_task(&mut app, "Buy groceries", None);
 
         // Then delete it
         execute_command(&mut app, Some(Command::Delete("Buy groceries".to_string())));
@@ -697,4 +723,5 @@ mod tests {
         let result = focus_task(&mut app, "nonexistent task");
         assert!(matches!(result, FocusResult::NoMatchingTask));
     }
+
 }

@@ -94,6 +94,7 @@ impl TaskpadState {
         if let Some(current) = self.focused_index {
             if current > self.display_to_id.len() {
                 self.focused_index = Some(0);
+                self.update_input_for_focus(tasks);
             }
         }
 
@@ -452,6 +453,32 @@ mod tests {
     use crate::taskstore::{TaskContainer, TaskStatus};
     use chrono::Utc;
 
+    fn setup_test_tasks() -> Vec<Task> {
+        vec![
+            Task {
+                id: 1,
+                content: "Task 1".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+            },
+            Task {
+                id: 2,
+                content: "Task 2".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+            },
+            Task {
+                id: 3,
+                content: "Task 3".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+            },
+        ]
+    }
+
     #[test]
     fn test_taskpad_display_order() {
         let mut state = TaskpadState::new();
@@ -661,5 +688,68 @@ mod tests {
         // Test cursor at exact line end
         let (x, y) = calculate_cursor_position(10, 10);
         assert_eq!((x, y), (0, 1));
+    }
+
+    #[test]
+    fn test_input_matches_focused_task() {
+        let mut state = TaskpadState::new();
+        let tasks = setup_test_tasks();
+        
+        // Initially at "Create new task", input should be empty
+        state.update_display_order(&tasks);
+        state.focused_index = Some(0);
+        state.update_input_for_focus(&tasks);
+        assert_eq!(state.input_value(), "");
+
+        // Focus on first task, input should match task content
+        state.focused_index = Some(1);
+        state.update_input_for_focus(&tasks);
+        assert_eq!(state.input_value(), "Task 1");
+
+        // Focus on second task, input should update
+        state.focused_index = Some(2);
+        state.update_input_for_focus(&tasks);
+        assert_eq!(state.input_value(), "Task 2");
+    }
+
+    #[test]
+    fn test_input_updates_when_display_changes() {
+        let mut state = TaskpadState::new();
+        let mut tasks = setup_test_tasks();
+        
+        // Focus on first task
+        state.update_display_order(&tasks);
+        state.focused_index = Some(1);
+        state.update_input_for_focus(&tasks);
+        assert_eq!(state.input_value(), "Task 1");
+
+        // Move first task to backburner, focus should stay at index 1 but show next task
+        tasks[0].container = TaskContainer::Backburner;
+        state.update_display_order(&tasks);
+        state.update_input_for_focus(&tasks);
+        assert_eq!(state.input_value(), "Task 2");
+    }
+
+    #[test]
+    fn test_input_resets_when_focus_invalid() {
+        let mut state = TaskpadState::new();
+        let mut tasks = setup_test_tasks();
+        
+        // Focus on last task
+        state.update_display_order(&tasks);
+        state.focused_index = Some(3);
+        state.update_input_for_focus(&tasks);
+        assert_eq!(state.input_value(), "Task 3");
+
+        // Move all tasks to backburner, making focus invalid
+        for task in tasks.iter_mut() {
+            task.container = TaskContainer::Backburner;
+        }
+        state.update_display_order(&tasks);
+        state.update_input_for_focus(&tasks);
+        
+        // Focus should reset to 0 and input should be empty
+        assert_eq!(state.focused_index, Some(0));
+        assert_eq!(state.input_value(), "");
     }
 }

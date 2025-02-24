@@ -7,7 +7,7 @@ mod debug;
 mod taskstore;
 mod ui;
 
-use crate::ui::{ActivityLog, TaskpadState};
+use crate::ui::{ActivityLog, DisplayContainerState};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::Terminal;
 use std::io;
@@ -23,7 +23,7 @@ pub struct App {
     /// Path to the tasks file
     pub tasks_file: String,
     /// State of the taskpad display
-    pub taskpad_state: TaskpadState,
+    pub display_container_state: DisplayContainerState,
     /// Log of recent activity
     pub activity_log: ActivityLog,
     /// Whether to show help text
@@ -44,7 +44,7 @@ impl App {
             tasks: Vec::new(),
             next_id: 1,
             tasks_file: "tasks.json".to_string(),
-            taskpad_state: TaskpadState::new(),
+            display_container_state: DisplayContainerState::new(),
             activity_log: ActivityLog::new(),
             show_help: true,
         }
@@ -70,7 +70,7 @@ fn main() -> io::Result<()> {
     if let Ok(tasks) = load_tasks(&app.tasks_file) {
         app.tasks = tasks;
         app.next_id = app.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
     }
 
     // Run app

@@ -55,27 +55,30 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
 /// Tasks are displayed as a numbered list (1. Task A, 2. Task B, etc.)
 /// with each task truncated to fit within a single line if necessary.
 #[derive(Debug)]
-pub struct TaskpadState {
+pub struct DisplayContainerState {
     /// Maps display positions to task IDs
     pub display_to_id: Vec<u32>,
     /// Currently focused task index (0-based)
     pub focused_index: Option<usize>,
     /// Input field for entering commands
     input: Input,
+    /// Currently active container being displayed
+    pub active_container: crate::taskstore::TaskContainer,
 }
 
-impl Default for TaskpadState {
+impl Default for DisplayContainerState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TaskpadState {
+impl DisplayContainerState {
     pub fn new() -> Self {
         Self {
             display_to_id: Vec::new(),
             focused_index: Some(0), // Start focused on "Create new task"
             input: Input::default(),
+            active_container: crate::taskstore::TaskContainer::Taskpad,
         }
     }
 
@@ -86,7 +89,7 @@ impl TaskpadState {
     pub fn update_display_order(&mut self, tasks: &[Task]) {
         self.display_to_id = tasks
             .iter()
-            .filter(|task| task.is_in_taskpad())
+            .filter(|task| task.container == self.active_container)
             .map(|task| task.id)
             .collect();
 
@@ -333,7 +336,7 @@ fn create_task_lines(
     lines.extend(
         tasks
             .iter()
-            .filter(|task| task.is_in_taskpad())
+            .filter(|task| task.container == crate::taskstore::TaskContainer::Taskpad)
             .enumerate()
             .map(|(idx, task)| {
                 format_task_line(
@@ -419,8 +422,8 @@ const fn calculate_cursor_position(cursor_pos: usize, available_width: usize) ->
 pub fn draw(frame: &mut Frame, app: &App) {
     let available_width = calculate_available_width(frame.size());
     let (input_lines, input_height) = calculate_input_dimensions(
-        app.taskpad_state.input_value(),
-        app.taskpad_state.input_cursor(),
+        app.display_container_state.input_value(),
+        app.display_container_state.input_cursor(),
         available_width,
     );
 
@@ -432,7 +435,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Render tasks
     let task_lines =
-        create_task_lines(&app.tasks, available_width, app.taskpad_state.focused_index);
+        create_task_lines(&app.tasks, available_width, app.display_container_state.focused_index);
     let tasks_widget = create_tasks_widget(task_lines);
     frame.render_widget(tasks_widget, chunks[0]);
 
@@ -455,7 +458,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     // Set cursor position
     let (cursor_x, cursor_y) =
-        calculate_cursor_position(app.taskpad_state.input_cursor(), available_width);
+        calculate_cursor_position(app.display_container_state.input_cursor(), available_width);
     frame.set_cursor(input_chunk.x + 1 + cursor_x, input_chunk.y + 1 + cursor_y);
 }
 
@@ -493,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_taskpad_display_order() {
-        let mut state = TaskpadState::new();
+        let mut state = DisplayContainerState::new();
         let now = Utc::now();
         let tasks = vec![
             Task {
@@ -534,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_taskpad_empty() {
-        let mut state = TaskpadState::new();
+        let mut state = DisplayContainerState::new();
         let tasks: Vec<Task> = vec![];
 
         state.update_display_order(&tasks);
@@ -708,7 +711,7 @@ mod tests {
 
     #[test]
     fn test_input_matches_focused_task() {
-        let mut state = TaskpadState::new();
+        let mut state = DisplayContainerState::new();
         let tasks = setup_test_tasks();
 
         // Initially at "Create new task", input should be empty
@@ -730,7 +733,7 @@ mod tests {
 
     #[test]
     fn test_input_updates_when_display_changes() {
-        let mut state = TaskpadState::new();
+        let mut state = DisplayContainerState::new();
         let mut tasks = setup_test_tasks();
 
         // Focus on first task
@@ -748,7 +751,7 @@ mod tests {
 
     #[test]
     fn test_input_resets_when_focus_invalid() {
-        let mut state = TaskpadState::new();
+        let mut state = DisplayContainerState::new();
         let mut tasks = setup_test_tasks();
 
         // Focus on last task

@@ -63,9 +63,9 @@ impl Task {
 /// Represents where the task is located in our system
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskContainer {
-    /// Task is in the inbox, waiting to be processed
+    /// Task is ready to be processed
     Taskpad,
-    /// Task has been organized into a project
+    /// Task has been organized into a project/area
     Backburner,
     /// Task is in the someday/maybe list
     Shelved,
@@ -102,14 +102,14 @@ pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
 }
 
 /// Finds a task in a slice of tasks by matching its content.
-/// Prioritizes tasks in the taskpad container over archived tasks.
+/// Prioritizes tasks in the active container over other tasks.
 ///
 /// The matching is intentionally strict:
 /// - Returns None for empty queries
 /// - Only matches full content with tolerance for typos
 /// - Case insensitive
 #[allow(clippy::cast_possible_wrap)]
-pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
+pub fn find_task_by_content(tasks: &[Task], query: &str, active_container: &TaskContainer) -> Option<usize> {
     // Return None for empty queries
     if query.is_empty() {
         return None;
@@ -120,11 +120,11 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
     // Calculate minimum score based on query length - allow roughly 1-2 typos
     let min_score = query.len() as i64 * 2 - 3;
 
-    // First try taskpad tasks
-    let taskpad_match = tasks
+    // First try tasks in active container
+    let active_match = tasks
         .iter()
         .enumerate()
-        .filter(|(_, task)| task.is_in_taskpad())
+        .filter(|(_, task)| &task.container == active_container)
         .filter_map(|(i, task)| {
             // We want the query length to be close to the task content length
             let len_diff = (task.content.len() as i64 - query.len() as i64).abs();
@@ -141,11 +141,11 @@ pub fn find_task_by_content(tasks: &[Task], query: &str) -> Option<usize> {
         .max_by_key(|(_, score)| *score)
         .map(|(i, _)| i);
 
-    if taskpad_match.is_some() {
-        return taskpad_match;
+    if active_match.is_some() {
+        return active_match;
     }
 
-    // If no taskpad match, try all tasks
+    // If no match in active container, try all tasks
     tasks
         .iter()
         .enumerate()
@@ -251,18 +251,18 @@ mod tests {
     fn test_find_task_by_content_case_insensitive() {
         let tasks = setup_test_tasks();
         // Should match exact content with different case
-        assert!(find_task_by_content(&tasks, "BUY GROCERIES").is_some());
-        assert!(find_task_by_content(&tasks, "CALL DENTIST").is_some());
+        assert!(find_task_by_content(&tasks, "BUY GROCERIES", &TaskContainer::Taskpad).is_some());
+        assert!(find_task_by_content(&tasks, "CALL DENTIST", &TaskContainer::Taskpad).is_some());
     }
 
     #[test]
     fn test_find_task_by_content_empty_query() {
         let tasks = setup_test_tasks();
-        assert!(find_task_by_content(&tasks, "").is_none());
+        assert!(find_task_by_content(&tasks, "", &TaskContainer::Taskpad).is_none());
     }
 
     #[test]
-    fn test_find_task_by_content_prioritizes_taskpad() {
+    fn test_find_task_by_content_prioritizes_active_container() {
         let mut tasks = setup_test_tasks();
         // Create two tasks with similar content, one in taskpad and one archived
         tasks.push(Task::new(4, "Important meeting".to_string()));
@@ -271,7 +271,7 @@ mod tests {
         tasks.push(archived_task);
 
         // Should find the taskpad task first
-        let found_idx = find_task_by_content(&tasks, "Important meeting").unwrap();
+        let found_idx = find_task_by_content(&tasks, "Important meeting", &TaskContainer::Taskpad).unwrap();
         assert_eq!(tasks[found_idx].id, 4);
         assert!(tasks[found_idx].is_in_taskpad());
     }

@@ -57,7 +57,7 @@ fn find_task(app: &App, query: &str) -> Option<usize> {
     let query = query.trim();
     if query.chars().all(|c| c.is_ascii_digit()) {
         if let Ok(index) = query.parse::<usize>() {
-            if let Some(task_id) = app.taskpad_state.get_task_id(index) {
+            if let Some(task_id) = app.display_container_state.get_task_id(index) {
                 return find_task_by_id(&app.tasks, task_id);
             }
             log_debug(&format!("No task at index {index}"));
@@ -65,7 +65,7 @@ fn find_task(app: &App, query: &str) -> Option<usize> {
     }
 
     // Fall back to fuzzy content match
-    find_task_by_content(&app.tasks, query)
+    find_task_by_content(&app.tasks, query, &app.display_container_state.active_container)
 }
 
 /// Completes a task by content match or task ID
@@ -78,7 +78,7 @@ fn complete_task(app: &mut App, query: &str, task_id: Option<u32>) -> CommandRes
             }
             let content = task.content.clone();
             task.complete();
-            app.taskpad_state.update_display_order(&app.tasks);
+            app.display_container_state.update_display_order(&app.tasks);
             return CommandResult::TaskCompleted { content };
         }
         return CommandResult::NoMatchingTask;
@@ -92,7 +92,7 @@ fn complete_task(app: &mut App, query: &str, task_id: Option<u32>) -> CommandRes
         }
         let content = task.content.clone();
         task.complete();
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
         CommandResult::TaskCompleted { content }
     } else {
         CommandResult::NoMatchingTask
@@ -208,10 +208,10 @@ fn focus_task(app: &mut App, query: &str) -> FocusResult {
         let content = task.content.clone();
 
         // Find the display index for this task
-        if let Some(display_idx) = app.taskpad_state.get_display_index(task.id) {
-            app.taskpad_state.focused_index = Some(display_idx);
+        if let Some(display_idx) = app.display_container_state.get_display_index(task.id) {
+            app.display_container_state.focused_index = Some(display_idx);
             // Also update input buffer with task content
-            app.taskpad_state.set_input(&content);
+            app.display_container_state.set_input(&content);
             FocusResult::Focused { content }
         } else {
             FocusResult::NoMatchingTask
@@ -259,7 +259,7 @@ fn execute_command(app: &mut App, command: Option<Command>) {
     }
 
     // Update display after any command
-    app.taskpad_state.update_display_order(&app.tasks);
+    app.display_container_state.update_display_order(&app.tasks);
     app.show_help = false;
 }
 
@@ -276,45 +276,45 @@ pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
         Event::Key(key_event) => match key_event.code {
             KeyCode::Up => {
-                if let Some(current) = app.taskpad_state.focused_index {
+                if let Some(current) = app.display_container_state.focused_index {
                     // If at index 0, wrap to the last item
                     let new_index = if current == 0 {
-                        app.taskpad_state.display_to_id.len()
+                        app.display_container_state.display_to_id.len()
                     } else {
                         current - 1
                     };
-                    app.taskpad_state.focused_index = Some(new_index);
-                    app.taskpad_state.update_input_for_focus(&app.tasks);
+                    app.display_container_state.focused_index = Some(new_index);
+                    app.display_container_state.update_input_for_focus(&app.tasks);
                 }
             }
             KeyCode::Down => {
-                if let Some(current) = app.taskpad_state.focused_index {
+                if let Some(current) = app.display_container_state.focused_index {
                     // If at last index, wrap to 0
-                    let new_index = if current >= app.taskpad_state.display_to_id.len() {
+                    let new_index = if current >= app.display_container_state.display_to_id.len() {
                         0
                     } else {
                         current + 1
                     };
-                    app.taskpad_state.focused_index = Some(new_index);
-                    app.taskpad_state.update_input_for_focus(&app.tasks);
+                    app.display_container_state.focused_index = Some(new_index);
+                    app.display_container_state.update_input_for_focus(&app.tasks);
                 }
             }
-            KeyCode::Esc => app.taskpad_state.clear_focus(),
+            KeyCode::Esc => app.display_container_state.clear_focus(),
             _ => {
                 // Handle input field updates
-                app.taskpad_state.get_input_mut().handle_event(&event);
+                app.display_container_state.get_input_mut().handle_event(&event);
 
                 // Check for Enter to submit
                 if key_event.code == KeyCode::Enter {
-                    let input = app.taskpad_state.input_value().to_string();
+                    let input = app.display_container_state.input_value().to_string();
                     if !input.is_empty() {
                         let commands = if is_ctrl_enter_pressed()
-                            && app.taskpad_state.focused_index.is_some()
+                            && app.display_container_state.focused_index.is_some()
                         {
-                            match app.taskpad_state.focused_index {
+                            match app.display_container_state.focused_index {
                                 Some(0) | None => vec![Command::Complete(input)],
                                 Some(idx) => app
-                                    .taskpad_state
+                                    .display_container_state
                                     .display_to_id
                                     .get(idx - 1)
                                     .copied()
@@ -326,10 +326,10 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                                     }),
                             }
                         } else {
-                            match app.taskpad_state.focused_index {
+                            match app.display_container_state.focused_index {
                                 Some(0) | None => vec![parse_command(input)],
                                 Some(idx) => app
-                                    .taskpad_state
+                                    .display_container_state
                                     .display_to_id
                                     .get(idx - 1)
                                     .copied()
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn test_find_task_by_display_index() {
         let mut app = setup_test_app();
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
 
         // Find by display index
         let index = find_task(&app, "1");
@@ -523,7 +523,7 @@ mod tests {
         let initial_count = app.tasks.len();
 
         // Update display order first
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
 
         // Delete by index
         execute_command(&mut app, Some(Command::Delete("1".to_string())));
@@ -676,7 +676,7 @@ mod tests {
     #[test]
     fn test_focus_task_by_content() {
         let mut app = setup_test_app();
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
         let result = focus_task(&mut app, "Buy groceries");
         assert!(matches!(
             result,
@@ -687,30 +687,30 @@ mod tests {
     #[test]
     fn test_focus_task_by_index_updates_state() {
         let mut app = setup_test_app();
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
 
         let result = focus_task(&mut app, "1");
         assert!(matches!(result, FocusResult::Focused { .. }));
 
         // Check that state is updated
-        assert_eq!(app.taskpad_state.focused_index, Some(1));
-        assert_eq!(app.taskpad_state.input_value(), "Buy groceries");
+        assert_eq!(app.display_container_state.focused_index, Some(1));
+        assert_eq!(app.display_container_state.input_value(), "Buy groceries");
     }
 
     #[test]
     fn test_focus_task_updates_input() {
         let mut app = setup_test_app();
-        app.taskpad_state.update_display_order(&app.tasks);
+        app.display_container_state.update_display_order(&app.tasks);
 
         // Set initial input
-        app.taskpad_state.set_input("previous input");
+        app.display_container_state.set_input("previous input");
 
         // Focus on first task
         let result = focus_task(&mut app, "1");
         assert!(matches!(result, FocusResult::Focused { .. }));
 
         // Check that input is updated
-        assert_eq!(app.taskpad_state.input_value(), "Buy groceries");
+        assert_eq!(app.display_container_state.input_value(), "Buy groceries");
     }
 
     #[test]

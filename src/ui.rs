@@ -16,7 +16,10 @@ use ratatui::{
 use std::io;
 use tui_input::Input;
 
-use crate::{taskstore::{Task, TaskContainer}, App};
+use crate::{
+    taskstore::{Task, TaskContainer},
+    App,
+};
 
 /// Initializes the terminal for TUI operation.
 ///
@@ -88,9 +91,18 @@ impl DisplayContainerState {
     /// with a special "Create new task" entry at index 0.
     pub fn update_display_order(&mut self, tasks: &[Task]) {
         use crate::debug::log_debug;
-        log_debug(&format!("Updating display for container: {:?}", self.active_container));
-        log_debug(&format!("Total tasks: {}, Task containers: {:?}", tasks.len(), 
-            tasks.iter().map(|t| (&t.content, &t.container)).collect::<Vec<_>>()));
+        log_debug(&format!(
+            "Updating display for container: {:?}",
+            self.active_container
+        ));
+        log_debug(&format!(
+            "Total tasks: {}, Task containers: {:?}",
+            tasks.len(),
+            tasks
+                .iter()
+                .map(|t| (&t.content, &t.container))
+                .collect::<Vec<_>>()
+        ));
         self.display_to_id = tasks
             .iter()
             .filter(|task| task.container == self.active_container)
@@ -457,12 +469,15 @@ pub fn draw(frame: &mut Frame, app: &App) {
         app.display_container_state.focused_index,
         app.display_container_state.active_container,
     );
-    let tasks_widget = create_tasks_widget(task_lines, match app.display_container_state.active_container {
-        TaskContainer::Taskpad => "Taskpad",
-        TaskContainer::Backburner => "Backburner",
-        TaskContainer::Shelved => "Shelved",
-        TaskContainer::Archived => "Archived",
-    });
+    let tasks_widget = create_tasks_widget(
+        task_lines,
+        match app.display_container_state.active_container {
+            TaskContainer::Taskpad => "Taskpad",
+            TaskContainer::Backburner => "Backburner",
+            TaskContainer::Shelved => "Shelved",
+            TaskContainer::Archived => "Archived",
+        },
+    );
     frame.render_widget(tasks_widget, chunks[0]);
 
     // Render activity log if there's a message

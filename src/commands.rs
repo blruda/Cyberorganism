@@ -20,8 +20,8 @@ enum Command {
     MoveToTaskpad(String),
     MoveToBackburner(String),
     MoveToShelved(String),
-    Edit(u32, String), // (task_id, new_content)
-    Focus(String),     // Focus on a task by index or content
+    Edit(u32, String),   // (task_id, new_content)
+    Focus(String),       // Focus on a task by index or content
     Show(TaskContainer), // Switch active container
 }
 
@@ -74,7 +74,11 @@ fn find_task(app: &App, query: &str) -> Option<usize> {
     }
 
     // Fall back to fuzzy content match
-    find_task_by_content(&app.tasks, query, &app.display_container_state.active_container)
+    find_task_by_content(
+        &app.tasks,
+        query,
+        app.display_container_state.active_container,
+    )
 }
 
 /// Completes a task by content match or task ID
@@ -209,7 +213,8 @@ fn execute_show_command(app: &mut App, container: TaskContainer) {
     let display_name = container.display_name().to_string();
     app.display_container_state.active_container = container;
     app.display_container_state.update_display_order(&app.tasks);
-    app.activity_log.add_message(format!("Showing {} tasks", display_name));
+    app.activity_log
+        .add_message(format!("Showing {display_name} tasks"));
 }
 
 /// Result of focusing on a task
@@ -259,7 +264,8 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
     } else {
-        app.activity_log.add_message(format!("No task found with ID {}", task_id));
+        app.activity_log
+            .add_message(format!("No task found with ID {task_id}"));
     }
 }
 
@@ -307,7 +313,8 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                         current - 1
                     };
                     app.display_container_state.focused_index = Some(new_index);
-                    app.display_container_state.update_input_for_focus(&app.tasks);
+                    app.display_container_state
+                        .update_input_for_focus(&app.tasks);
                 }
             }
             KeyCode::Down => {
@@ -319,13 +326,16 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                         current + 1
                     };
                     app.display_container_state.focused_index = Some(new_index);
-                    app.display_container_state.update_input_for_focus(&app.tasks);
+                    app.display_container_state
+                        .update_input_for_focus(&app.tasks);
                 }
             }
             KeyCode::Esc => app.display_container_state.clear_focus(),
             _ => {
                 // Handle input field updates
-                app.display_container_state.get_input_mut().handle_event(&event);
+                app.display_container_state
+                    .get_input_mut()
+                    .handle_event(&event);
 
                 // Check for Enter to submit
                 if key_event.code == KeyCode::Enter {
@@ -596,7 +606,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved task to taskpad: {}", content)
+            &format!("Moved task to Taskpad: {}", content)
         );
     }
 
@@ -611,7 +621,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            "Task already in taskpad"
+            "Task already in Taskpad"
         );
     }
 
@@ -626,7 +636,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved task to backburner: {}", content)
+            &format!("Moved task to Backburner: {}", content)
         );
     }
 
@@ -642,7 +652,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            "Task already in backburner"
+            "Task already in Backburner"
         );
     }
 
@@ -657,7 +667,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved task to shelved: {}", content)
+            &format!("Moved task to Shelved: {}", content)
         );
     }
 
@@ -673,7 +683,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            "Task already in shelved"
+            "Task already in Shelved"
         );
     }
 
@@ -750,10 +760,19 @@ mod tests {
     #[test]
     fn test_show_command() {
         let mut app = setup_test_app();
-        assert_eq!(app.display_container_state.active_container, TaskContainer::Taskpad);
+        assert_eq!(
+            app.display_container_state.active_container,
+            TaskContainer::Taskpad
+        );
 
         execute_show_command(&mut app, TaskContainer::Backburner);
-        assert_eq!(app.display_container_state.active_container, TaskContainer::Backburner);
-        assert_eq!(app.activity_log.latest_message(), Some("Showing backburner tasks"));
+        assert_eq!(
+            app.display_container_state.active_container,
+            TaskContainer::Backburner
+        );
+        assert_eq!(
+            app.activity_log.latest_message(),
+            Some("Showing Backburner tasks")
+        );
     }
 }

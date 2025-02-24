@@ -75,12 +75,12 @@ pub enum TaskContainer {
 
 impl TaskContainer {
     /// Returns a human-readable name for the container
-    pub const fn display_name(&self) -> &'static str {
+    pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Taskpad => "taskpad",
-            Self::Backburner => "backburner",
-            Self::Shelved => "shelved",
-            Self::Archived => "archived",
+            Self::Taskpad => "Taskpad",
+            Self::Backburner => "Backburner",
+            Self::Shelved => "Shelved",
+            Self::Archived => "Archived",
         }
     }
 }
@@ -109,7 +109,11 @@ pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
 /// - Only matches full content with tolerance for typos
 /// - Case insensitive
 #[allow(clippy::cast_possible_wrap)]
-pub fn find_task_by_content(tasks: &[Task], query: &str, active_container: &TaskContainer) -> Option<usize> {
+pub fn find_task_by_content(
+    tasks: &[Task],
+    query: &str,
+    active_container: TaskContainer,
+) -> Option<usize> {
     // Return None for empty queries
     if query.is_empty() {
         return None;
@@ -124,7 +128,7 @@ pub fn find_task_by_content(tasks: &[Task], query: &str, active_container: &Task
     let active_match = tasks
         .iter()
         .enumerate()
-        .filter(|(_, task)| &task.container == active_container)
+        .filter(|(_, task)| task.container == active_container)
         .filter_map(|(i, task)| {
             // We want the query length to be close to the task content length
             let len_diff = (task.content.len() as i64 - query.len() as i64).abs();
@@ -233,10 +237,10 @@ mod tests {
 
     #[test]
     fn test_task_container_display_names() {
-        assert_eq!(TaskContainer::Taskpad.display_name(), "taskpad");
-        assert_eq!(TaskContainer::Backburner.display_name(), "backburner");
-        assert_eq!(TaskContainer::Shelved.display_name(), "shelved");
-        assert_eq!(TaskContainer::Archived.display_name(), "archived");
+        assert_eq!(TaskContainer::Taskpad.display_name(), "Taskpad");
+        assert_eq!(TaskContainer::Backburner.display_name(), "Backburner");
+        assert_eq!(TaskContainer::Shelved.display_name(), "Shelved");
+        assert_eq!(TaskContainer::Archived.display_name(), "Archived");
     }
 
     #[test]
@@ -251,14 +255,14 @@ mod tests {
     fn test_find_task_by_content_case_insensitive() {
         let tasks = setup_test_tasks();
         // Should match exact content with different case
-        assert!(find_task_by_content(&tasks, "BUY GROCERIES", &TaskContainer::Taskpad).is_some());
-        assert!(find_task_by_content(&tasks, "CALL DENTIST", &TaskContainer::Taskpad).is_some());
+        assert!(find_task_by_content(&tasks, "BUY GROCERIES", TaskContainer::Taskpad).is_some());
+        assert!(find_task_by_content(&tasks, "CALL DENTIST", TaskContainer::Taskpad).is_some());
     }
 
     #[test]
     fn test_find_task_by_content_empty_query() {
         let tasks = setup_test_tasks();
-        assert!(find_task_by_content(&tasks, "", &TaskContainer::Taskpad).is_none());
+        assert!(find_task_by_content(&tasks, "", TaskContainer::Taskpad).is_none());
     }
 
     #[test]
@@ -271,7 +275,8 @@ mod tests {
         tasks.push(archived_task);
 
         // Should find the taskpad task first
-        let found_idx = find_task_by_content(&tasks, "Important meeting", &TaskContainer::Taskpad).unwrap();
+        let found_idx =
+            find_task_by_content(&tasks, "Important meeting", TaskContainer::Taskpad).unwrap();
         assert_eq!(tasks[found_idx].id, 4);
         assert!(tasks[found_idx].is_in_taskpad());
     }

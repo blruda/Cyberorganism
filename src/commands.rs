@@ -2,6 +2,7 @@
 //! keyboard input into task management operations.
 
 use crossterm::event::{Event, KeyCode};
+use device_query::{DeviceQuery, DeviceState, Keycode};
 use tui_input::backend::crossterm::EventHandler;
 
 use crate::{
@@ -236,6 +237,12 @@ fn execute_command(app: &mut App, command: Option<Command>) {
     app.show_help = false;
 }
 
+fn is_ctrl_enter_pressed() -> bool {
+    let device_state = DeviceState::new();
+    let keys: Vec<Keycode> = device_state.get_keys();
+    keys.contains(&Keycode::LControl) && keys.contains(&Keycode::Enter)
+}
+
 /// Handles input events and executes commands
 pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
@@ -273,22 +280,27 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                 if key_event.code == KeyCode::Enter {
                     let input = app.taskpad_state.input_value().to_string();
                     if !input.is_empty() {
-                        let command = match app.taskpad_state.focused_index {
-                            Some(0) => {
-                                // At "Create new task" - parse as normal command
-                                Some(parse_command(input))
-                            }
-                            Some(idx) => {
-                                // At existing task - create edit command
-                                if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
-                                    Some(Command::Edit(task_id, input))
-                                } else {
-                                    None
+                        let command = if is_ctrl_enter_pressed() && app.taskpad_state.focused_index.is_some() {
+                            // Complete the focused task
+                            Some(Command::Complete(input))
+                        } else {
+                            match app.taskpad_state.focused_index {
+                                Some(0) => {
+                                    // At "Create new task" - parse as normal command
+                                    Some(parse_command(input))
                                 }
-                            }
-                            None => {
-                                // No focus - parse as normal command
-                                Some(parse_command(input))
+                                Some(idx) => {
+                                    // At existing task - create edit command
+                                    if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
+                                        Some(Command::Edit(task_id, input))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                None => {
+                                    // No focus - parse as normal command
+                                    Some(parse_command(input))
+                                }
                             }
                         };
                         
@@ -299,9 +311,8 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                                     execute_command(app, Some(cmd));
                                 }
                                 _ => {
-                                    // For other commands, reset input after execution
+                                    // For other commands, execute
                                     execute_command(app, Some(cmd));
-                                    app.taskpad_state.reset_input();
                                 }
                             }
                         }

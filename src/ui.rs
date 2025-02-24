@@ -94,9 +94,11 @@ impl TaskpadState {
         if let Some(current) = self.focused_index {
             if current > self.display_to_id.len() {
                 self.focused_index = Some(0);
-                self.input.reset();
             }
         }
+
+        // Always sync input with current focus since the task at each index might have changed
+        self.update_input_for_focus(tasks);
     }
 
     /// Gets a task ID from a 1-based display index.

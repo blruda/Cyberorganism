@@ -77,10 +77,10 @@ impl TaskContainer {
     /// Returns a human-readable name for the container
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Taskpad => "Taskpad",
-            Self::Backburner => "Backburner",
-            Self::Shelved => "Shelved",
-            Self::Archived => "Archived",
+            Self::Taskpad => "taskpad",
+            Self::Backburner => "backburner",
+            Self::Shelved => "shelved",
+            Self::Archived => "archived",
         }
     }
 }
@@ -237,10 +237,10 @@ mod tests {
 
     #[test]
     fn test_task_container_display_names() {
-        assert_eq!(TaskContainer::Taskpad.display_name(), "Taskpad");
-        assert_eq!(TaskContainer::Backburner.display_name(), "Backburner");
-        assert_eq!(TaskContainer::Shelved.display_name(), "Shelved");
-        assert_eq!(TaskContainer::Archived.display_name(), "Archived");
+        assert_eq!(TaskContainer::Taskpad.display_name(), "taskpad");
+        assert_eq!(TaskContainer::Backburner.display_name(), "backburner");
+        assert_eq!(TaskContainer::Shelved.display_name(), "shelved");
+        assert_eq!(TaskContainer::Archived.display_name(), "archived");
     }
 
     #[test]

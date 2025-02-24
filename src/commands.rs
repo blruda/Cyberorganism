@@ -606,7 +606,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved task to Taskpad: {}", content)
+            &format!("Moved task to taskpad: {}", content)
         );
     }
 
@@ -621,7 +621,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            "Task already in Taskpad"
+            "Task already in taskpad"
         );
     }
 
@@ -636,7 +636,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved task to Backburner: {}", content)
+            &format!("Moved task to backburner: {}", content)
         );
     }
 
@@ -652,7 +652,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            "Task already in Backburner"
+            "Task already in backburner"
         );
     }
 
@@ -667,7 +667,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved task to Shelved: {}", content)
+            &format!("Moved task to shelved: {}", content)
         );
     }
 
@@ -683,7 +683,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            "Task already in Shelved"
+            "Task already in shelved"
         );
     }
 
@@ -772,7 +772,7 @@ mod tests {
         );
         assert_eq!(
             app.activity_log.latest_message(),
-            Some("Showing Backburner tasks")
+            Some("Showing backburner tasks")
         );
     }
 }

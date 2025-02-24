@@ -61,7 +61,7 @@ impl Task {
 }
 
 /// Represents where the task is located in our system
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskContainer {
     /// Task is ready to be processed
     Taskpad,

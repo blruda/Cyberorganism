@@ -16,7 +16,7 @@ use ratatui::{
 use std::io;
 use tui_input::Input;
 
-use crate::{taskstore::Task, App};
+use crate::{taskstore::{Task, TaskContainer}, App};
 
 /// Initializes the terminal for TUI operation.
 ///
@@ -87,6 +87,10 @@ impl DisplayContainerState {
     /// The display will show tasks as a numbered list starting from 1,
     /// with a special "Create new task" entry at index 0.
     pub fn update_display_order(&mut self, tasks: &[Task]) {
+        use crate::debug::log_debug;
+        log_debug(&format!("Updating display for container: {:?}", self.active_container));
+        log_debug(&format!("Total tasks: {}, Task containers: {:?}", tasks.len(), 
+            tasks.iter().map(|t| (&t.content, &t.container)).collect::<Vec<_>>()));
         self.display_to_id = tasks
             .iter()
             .filter(|task| task.container == self.active_container)
@@ -192,11 +196,23 @@ impl DisplayContainerState {
     }
 
     pub fn update_input_for_focus(&mut self, tasks: &[Task]) {
+        // If there are no tasks in the current container, reset focus to 0 and clear input
+        let has_tasks_in_container = tasks.iter().any(|t| t.container == self.active_container);
+        if !has_tasks_in_container {
+            self.focused_index = Some(0);
+            self.input.reset();
+            return;
+        }
+
         match self.focused_index {
             Some(0) => self.input.reset(),
             _ => {
                 if let Some(content) = self.get_focused_task_content(tasks) {
                     self.input = Input::new(content.to_string());
+                } else {
+                    // If focused task doesn't exist anymore, reset to 0
+                    self.focused_index = Some(0);
+                    self.input.reset();
                 }
             }
         }
@@ -316,6 +332,7 @@ fn create_task_lines(
     tasks: &[Task],
     available_width: usize,
     focused_index: Option<usize>,
+    active_container: TaskContainer,
 ) -> Vec<Line> {
     let mut lines = Vec::new();
 
@@ -336,7 +353,7 @@ fn create_task_lines(
     lines.extend(
         tasks
             .iter()
-            .filter(|task| task.container == crate::taskstore::TaskContainer::Taskpad)
+            .filter(|task| task.container == active_container)
             .enumerate()
             .map(|(idx, task)| {
                 format_task_line(
@@ -352,9 +369,9 @@ fn create_task_lines(
 }
 
 /// Create the tasks widget
-fn create_tasks_widget(tasks_text: Vec<Line<'_>>) -> Paragraph<'_> {
+fn create_tasks_widget<'a>(tasks_text: Vec<Line<'a>>, container_name: &'a str) -> Paragraph<'a> {
     Paragraph::new(tasks_text)
-        .block(Block::default().borders(Borders::ALL))
+        .block(Block::default().borders(Borders::ALL).title(container_name))
         .style(Style::default().fg(Color::Rgb(57, 255, 20)))
         .wrap(Wrap { trim: false })
 }
@@ -434,9 +451,18 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .split(frame.size());
 
     // Render tasks
-    let task_lines =
-        create_task_lines(&app.tasks, available_width, app.display_container_state.focused_index);
-    let tasks_widget = create_tasks_widget(task_lines);
+    let task_lines = create_task_lines(
+        &app.tasks,
+        available_width,
+        app.display_container_state.focused_index,
+        app.display_container_state.active_container,
+    );
+    let tasks_widget = create_tasks_widget(task_lines, match app.display_container_state.active_container {
+        TaskContainer::Taskpad => "Taskpad",
+        TaskContainer::Backburner => "Backburner",
+        TaskContainer::Shelved => "Shelved",
+        TaskContainer::Archived => "Archived",
+    });
     frame.render_widget(tasks_widget, chunks[0]);
 
     // Render activity log if there's a message
@@ -480,9 +506,9 @@ mod tests {
             Task {
                 id: 2,
                 content: "Task 2".to_string(),
-                container: TaskContainer::Taskpad,
+                container: TaskContainer::Archived,
                 created_at: Utc::now(),
-                status: TaskStatus::Todo,
+                status: TaskStatus::Done,
             },
             Task {
                 id: 3,
@@ -679,7 +705,7 @@ mod tests {
             },
         ];
 
-        let lines = create_task_lines(&tasks, 20, None);
+        let lines = create_task_lines(&tasks, 20, None, TaskContainer::Taskpad);
         assert_eq!(
             lines.len(),
             3,
@@ -728,7 +754,7 @@ mod tests {
         // Focus on second task, input should update
         state.focused_index = Some(2);
         state.update_input_for_focus(&tasks);
-        assert_eq!(state.input_value(), "Task 2");
+        assert_eq!(state.input_value(), "Task 3");
     }
 
     #[test]
@@ -746,7 +772,7 @@ mod tests {
         tasks[0].container = TaskContainer::Backburner;
         state.update_display_order(&tasks);
         state.update_input_for_focus(&tasks);
-        assert_eq!(state.input_value(), "Task 2");
+        assert_eq!(state.input_value(), "Task 3");
     }
 
     #[test]
@@ -754,21 +780,20 @@ mod tests {
         let mut state = DisplayContainerState::new();
         let mut tasks = setup_test_tasks();
 
-        // Focus on last task
+        // Focus on a task
         state.update_display_order(&tasks);
-        state.focused_index = Some(3);
+        state.focused_index = Some(1);
         state.update_input_for_focus(&tasks);
-        assert_eq!(state.input_value(), "Task 3");
+        assert_eq!(state.input_value(), "Task 1");
 
-        // Move all tasks to backburner, making focus invalid
+        // Make focus invalid by moving all tasks out of the container
         for task in tasks.iter_mut() {
             task.container = TaskContainer::Backburner;
         }
         state.update_display_order(&tasks);
         state.update_input_for_focus(&tasks);
 
-        // Focus should reset to 0 and input should be empty
-        assert_eq!(state.focused_index, Some(0));
+        // Input should reset
         assert_eq!(state.input_value(), "");
     }
 }

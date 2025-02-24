@@ -22,6 +22,7 @@ enum Command {
     MoveToShelved(String),
     Edit(u32, String), // (task_id, new_content)
     Focus(String),     // Focus on a task by index or content
+    Show(TaskContainer), // Switch active container
 }
 
 /// Parses the input string into a Command
@@ -39,6 +40,14 @@ fn parse_command(input: String) -> Command {
         Command::MoveToShelved(task_query.to_string())
     } else if let Some(task_query) = input.strip_prefix("focus ") {
         Command::Focus(task_query.to_string())
+    } else if let Some(container) = input.strip_prefix("show ") {
+        match container {
+            "taskpad" => Command::Show(TaskContainer::Taskpad),
+            "backburner" => Command::Show(TaskContainer::Backburner),
+            "shelved" => Command::Show(TaskContainer::Shelved),
+            "archived" => Command::Show(TaskContainer::Archived),
+            _ => Command::Create(input), // Invalid container, treat as task creation
+        }
     } else {
         Command::Create(input)
     }
@@ -195,6 +204,14 @@ fn execute_move_to_shelved_command(app: &mut App, query: &str) {
     execute_move_command(app, query, TaskContainer::Shelved);
 }
 
+/// Execute show container command
+fn execute_show_command(app: &mut App, container: TaskContainer) {
+    let display_name = container.display_name().to_string();
+    app.display_container_state.active_container = container;
+    app.display_container_state.update_display_order(&app.tasks);
+    app.activity_log.add_message(format!("Showing {} tasks", display_name));
+}
+
 /// Result of focusing on a task
 enum FocusResult {
     Focused { content: String },
@@ -233,6 +250,19 @@ fn execute_focus_command(app: &mut App, query: &str) {
     }
 }
 
+/// Execute edit command
+fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
+    if let Some(task) = app.tasks.iter_mut().find(|t| t.id == task_id) {
+        task.update_content(content);
+        app.activity_log.add_message("Task updated".to_string());
+        if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
+            log_debug(&format!("Failed to save tasks: {e}"));
+        }
+    } else {
+        app.activity_log.add_message(format!("No task found with ID {}", task_id));
+    }
+}
+
 /// Executes a command, updating the app state as needed
 fn execute_command(app: &mut App, command: Option<Command>) {
     match command {
@@ -244,17 +274,10 @@ fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::MoveToBackburner(query)) => execute_move_to_backburner_command(app, &query),
         Some(Command::MoveToShelved(query)) => execute_move_to_shelved_command(app, &query),
         Some(Command::Focus(query)) => execute_focus_command(app, &query),
-        Some(Command::Edit(task_id, content)) => {
-            if let Some(task) = app.tasks.iter_mut().find(|t| t.id == task_id) {
-                task.update_content(content);
-                app.log_activity("Task updated".to_string());
-                if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
-                    log_debug(&format!("Failed to save tasks: {e}"));
-                }
-            }
-        }
+        Some(Command::Show(container)) => execute_show_command(app, container),
+        Some(Command::Edit(task_id, content)) => execute_edit_command(app, task_id, content),
         None => {
-            app.log_activity("Invalid command".to_string());
+            app.activity_log.add_message("Invalid command".to_string());
         }
     }
 
@@ -417,6 +440,10 @@ mod tests {
         // Test focus command
         let cmd = parse_command("focus Test task".to_string());
         assert!(matches!(cmd, Command::Focus(content) if content == "Test task"));
+
+        // Test show command
+        let cmd = parse_command("show taskpad".to_string());
+        assert!(matches!(cmd, Command::Show(container) if container == TaskContainer::Taskpad));
 
         // Test with trailing spaces in task content
         let cmd = parse_command("complete Test task  ".to_string());
@@ -718,5 +745,15 @@ mod tests {
         let mut app = setup_test_app();
         let result = focus_task(&mut app, "nonexistent task");
         assert!(matches!(result, FocusResult::NoMatchingTask));
+    }
+
+    #[test]
+    fn test_show_command() {
+        let mut app = setup_test_app();
+        assert_eq!(app.display_container_state.active_container, TaskContainer::Taskpad);
+
+        execute_show_command(&mut app, TaskContainer::Backburner);
+        assert_eq!(app.display_container_state.active_container, TaskContainer::Backburner);
+        assert_eq!(app.activity_log.latest_message(), Some("Showing backburner tasks"));
     }
 }

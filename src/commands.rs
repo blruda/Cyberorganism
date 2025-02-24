@@ -20,8 +20,8 @@ enum Command {
     MoveToTaskpad(String),
     MoveToBackburner(String),
     MoveToShelved(String),
-    Edit(u32, String),  // (task_id, new_content)
-    Focus(String),  // Focus on a task by index or content
+    Edit(u32, String), // (task_id, new_content)
+    Focus(String),     // Focus on a task by index or content
 }
 
 /// Parses the input string into a Command
@@ -206,7 +206,7 @@ fn focus_task(app: &mut App, query: &str) -> FocusResult {
     if let Some(index) = find_task(app, query) {
         let task = &app.tasks[index];
         let content = task.content.clone();
-        
+
         // Find the display index for this task
         if let Some(display_idx) = app.taskpad_state.get_display_index(task.id) {
             app.taskpad_state.focused_index = Some(display_idx);
@@ -225,7 +225,7 @@ fn focus_task(app: &mut App, query: &str) -> FocusResult {
 fn execute_focus_command(app: &mut App, query: &str) {
     match focus_task(app, query) {
         FocusResult::Focused { content } => {
-            app.log_activity(format!("Focused on task: {}", content));
+            app.log_activity(format!("Focused on task: {content}"));
         }
         FocusResult::NoMatchingTask => {
             app.log_activity("No matching task found".to_string());
@@ -269,7 +269,9 @@ fn is_ctrl_enter_pressed() -> bool {
     keys.contains(&Keycode::LControl) && keys.contains(&Keycode::Enter)
 }
 
-/// Handles input events and executes commands
+/// Handle keyboard input events
+#[allow(clippy::needless_pass_by_value)] // Event is small and Copy
+#[allow(clippy::single_match)] // Match is clearer and we might add more event types
 pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
         Event::Key(key_event) => match key_event.code {
@@ -301,48 +303,42 @@ pub fn handle_input_event(app: &mut App, event: Event) {
             _ => {
                 // Handle input field updates
                 app.taskpad_state.get_input_mut().handle_event(&event);
-                
+
                 // Check for Enter to submit
                 if key_event.code == KeyCode::Enter {
                     let input = app.taskpad_state.input_value().to_string();
                     if !input.is_empty() {
-                        let commands = if is_ctrl_enter_pressed() && app.taskpad_state.focused_index.is_some() {
+                        let commands = if is_ctrl_enter_pressed()
+                            && app.taskpad_state.focused_index.is_some()
+                        {
                             match app.taskpad_state.focused_index {
-                                Some(0) => vec![Command::Complete(input)],
-                                Some(idx) => {
-                                    // At existing task - edit and complete
-                                    if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
+                                Some(0) | None => vec![Command::Complete(input)],
+                                Some(idx) => app
+                                    .taskpad_state
+                                    .display_to_id
+                                    .get(idx - 1)
+                                    .copied()
+                                    .map_or_else(Vec::new, |task_id| {
                                         vec![
-                                            Command::Edit(task_id, input.clone()),
-                                            Command::CompleteById(task_id)
+                                            Command::Edit(task_id, input),
+                                            Command::CompleteById(task_id),
                                         ]
-                                    } else {
-                                        vec![]
-                                    }
-                                }
-                                None => vec![Command::Complete(input)]
+                                    }),
                             }
                         } else {
                             match app.taskpad_state.focused_index {
-                                Some(0) => {
-                                    // At "Create new task" - parse as normal command
-                                    vec![parse_command(input)]
-                                }
-                                Some(idx) => {
-                                    // At existing task - create edit command
-                                    if let Some(task_id) = app.taskpad_state.display_to_id.get(idx - 1).copied() {
+                                Some(0) | None => vec![parse_command(input)],
+                                Some(idx) => app
+                                    .taskpad_state
+                                    .display_to_id
+                                    .get(idx - 1)
+                                    .copied()
+                                    .map_or_else(Vec::new, |task_id| {
                                         vec![Command::Edit(task_id, input)]
-                                    } else {
-                                        vec![]
-                                    }
-                                }
-                                None => {
-                                    // No focus - parse as normal command
-                                    vec![parse_command(input)]
-                                }
+                                    }),
                             }
                         };
-                        
+
                         for cmd in commands {
                             match cmd {
                                 Command::Edit(_, _) => {
@@ -692,7 +688,7 @@ mod tests {
     fn test_focus_task_by_index_updates_state() {
         let mut app = setup_test_app();
         app.taskpad_state.update_display_order(&app.tasks);
-        
+
         let result = focus_task(&mut app, "1");
         assert!(matches!(result, FocusResult::Focused { .. }));
 
@@ -723,5 +719,4 @@ mod tests {
         let result = focus_task(&mut app, "nonexistent task");
         assert!(matches!(result, FocusResult::NoMatchingTask));
     }
-
 }

@@ -74,7 +74,7 @@ impl TaskpadState {
     pub fn new() -> Self {
         Self {
             display_to_id: Vec::new(),
-            focused_index: Some(0),  // Start focused on "Create new task"
+            focused_index: Some(0), // Start focused on "Create new task"
             input: Input::default(),
         }
     }
@@ -89,7 +89,7 @@ impl TaskpadState {
             .filter(|task| task.is_in_taskpad())
             .map(|task| task.id)
             .collect();
-            
+
         // Reset focus to 0 if it's beyond the new list length
         if let Some(current) = self.focused_index {
             if current > self.display_to_id.len() {
@@ -134,9 +134,9 @@ impl TaskpadState {
     pub fn focus_previous(&mut self) {
         let max_index = self.display_to_id.len();
         self.focused_index = Some(match self.focused_index {
-            Some(0) => max_index,  // Wrap to bottom
+            Some(0) => max_index, // Wrap to bottom
             Some(current) => current - 1,
-            None => 0,  // Start at "Create new task"
+            None => 0, // Start at "Create new task"
         });
     }
 
@@ -144,9 +144,9 @@ impl TaskpadState {
     pub fn focus_next(&mut self) {
         let max_index = self.display_to_id.len();
         self.focused_index = Some(match self.focused_index {
-            Some(current) if current >= max_index => 0,  // Wrap to top
+            Some(current) if current >= max_index => 0, // Wrap to top
             Some(current) => current + 1,
-            None => 0,  // Start at "Create new task"
+            None => 0, // Start at "Create new task"
         });
     }
 
@@ -162,7 +162,8 @@ impl TaskpadState {
             Some(0) => None, // "Create new task" entry
             Some(idx) if idx <= self.display_to_id.len() => {
                 let task_id = self.display_to_id[idx - 1];
-                tasks.iter()
+                tasks
+                    .iter()
                     .find(|task| task.id == task_id)
                     .map(|task| task.content.as_str())
             }
@@ -190,8 +191,10 @@ impl TaskpadState {
     pub fn update_input_for_focus(&mut self, tasks: &[Task]) {
         match self.focused_index {
             Some(0) => self.input.reset(),
-            _ => if let Some(content) = self.get_focused_task_content(tasks) {
-                self.input = Input::new(content.to_string());
+            _ => {
+                if let Some(content) = self.get_focused_task_content(tasks) {
+                    self.input = Input::new(content.to_string());
+                }
             }
         }
     }
@@ -306,9 +309,13 @@ fn format_task_line(idx: usize, task: &Task, available_width: usize, is_focused:
 }
 
 /// Create task lines for display
-fn create_task_lines(tasks: &[Task], available_width: usize, focused_index: Option<usize>) -> Vec<Line> {
+fn create_task_lines(
+    tasks: &[Task],
+    available_width: usize,
+    focused_index: Option<usize>,
+) -> Vec<Line> {
     let mut lines = Vec::new();
-    
+
     // Add the "Create new task" entry at index 0
     let create_task_style = if focused_index == Some(0) {
         Style::default()
@@ -330,7 +337,7 @@ fn create_task_lines(tasks: &[Task], available_width: usize, focused_index: Opti
             .enumerate()
             .map(|(idx, task)| {
                 format_task_line(
-                    idx,  // format_task_line already adds 1 for display
+                    idx, // format_task_line already adds 1 for display
                     task,
                     available_width,
                     Some(idx + 1) == focused_index, // +1 here since focus indices include "Create new task"
@@ -411,8 +418,11 @@ const fn calculate_cursor_position(cursor_pos: usize, available_width: usize) ->
 /// and each task is truncated if it would exceed the width of the display.
 pub fn draw(frame: &mut Frame, app: &App) {
     let available_width = calculate_available_width(frame.size());
-    let (input_lines, input_height) =
-        calculate_input_dimensions(app.taskpad_state.input_value(), app.taskpad_state.input_cursor(), available_width);
+    let (input_lines, input_height) = calculate_input_dimensions(
+        app.taskpad_state.input_value(),
+        app.taskpad_state.input_cursor(),
+        available_width,
+    );
 
     let constraints = create_layout_constraints(input_height, app.show_help);
     let chunks = Layout::default()
@@ -421,7 +431,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .split(frame.size());
 
     // Render tasks
-    let task_lines = create_task_lines(&app.tasks, available_width, app.taskpad_state.focused_index);
+    let task_lines =
+        create_task_lines(&app.tasks, available_width, app.taskpad_state.focused_index);
     let tasks_widget = create_tasks_widget(task_lines);
     frame.render_widget(tasks_widget, chunks[0]);
 
@@ -443,7 +454,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
     frame.render_widget(input_widget, input_chunk);
 
     // Set cursor position
-    let (cursor_x, cursor_y) = calculate_cursor_position(app.taskpad_state.input_cursor(), available_width);
+    let (cursor_x, cursor_y) =
+        calculate_cursor_position(app.taskpad_state.input_cursor(), available_width);
     frame.set_cursor(input_chunk.x + 1 + cursor_x, input_chunk.y + 1 + cursor_y);
 }
 
@@ -665,7 +677,11 @@ mod tests {
         ];
 
         let lines = create_task_lines(&tasks, 20, None);
-        assert_eq!(lines.len(), 3, "Should include 'Create new task' and two tasks");
+        assert_eq!(
+            lines.len(),
+            3,
+            "Should include 'Create new task' and two tasks"
+        );
         assert!(lines[0].spans[0].content.contains("<Create new task>"));
         assert!(lines[1].spans[0].content.contains("Task 1"));
         assert!(lines[2].spans[0].content.contains("Task 3"));
@@ -694,7 +710,7 @@ mod tests {
     fn test_input_matches_focused_task() {
         let mut state = TaskpadState::new();
         let tasks = setup_test_tasks();
-        
+
         // Initially at "Create new task", input should be empty
         state.update_display_order(&tasks);
         state.focused_index = Some(0);
@@ -716,7 +732,7 @@ mod tests {
     fn test_input_updates_when_display_changes() {
         let mut state = TaskpadState::new();
         let mut tasks = setup_test_tasks();
-        
+
         // Focus on first task
         state.update_display_order(&tasks);
         state.focused_index = Some(1);
@@ -734,7 +750,7 @@ mod tests {
     fn test_input_resets_when_focus_invalid() {
         let mut state = TaskpadState::new();
         let mut tasks = setup_test_tasks();
-        
+
         // Focus on last task
         state.update_display_order(&tasks);
         state.focused_index = Some(3);
@@ -747,7 +763,7 @@ mod tests {
         }
         state.update_display_order(&tasks);
         state.update_input_for_focus(&tasks);
-        
+
         // Focus should reset to 0 and input should be empty
         assert_eq!(state.focused_index, Some(0));
         assert_eq!(state.input_value(), "");

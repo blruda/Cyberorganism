@@ -38,6 +38,11 @@ impl Task {
         }
     }
 
+    /// Updates the task's content
+    pub fn update_content(&mut self, content: String) {
+        self.content = content;
+    }
+
     /// Marks the task as complete and moves it to the archived container
     pub fn complete(&mut self) {
         self.status = TaskStatus::Done;

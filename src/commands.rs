@@ -6,6 +6,7 @@ use crate::taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, 
 use crate::App;
 use crossterm::event::{Event, KeyCode};
 use tui_input::backend::crossterm::EventHandler;
+use tui_input::Input;
 
 /// Commands that can be executed by the user
 enum Command {
@@ -15,6 +16,8 @@ enum Command {
     MoveToTaskpad(String),
     MoveToBackburner(String),
     MoveToShelved(String),
+    Edit(u32, String),  // (task_id, new_content)
+    Focus(String),  // Focus on a task by index or content
 }
 
 /// Parses the input string into a Command
@@ -30,6 +33,8 @@ fn parse_command(input: String) -> Command {
         Command::MoveToBackburner(task_query.to_string())
     } else if let Some(task_query) = input.strip_prefix("move to shelved ") {
         Command::MoveToShelved(task_query.to_string())
+    } else if let Some(task_query) = input.strip_prefix("focus ") {
+        Command::Focus(task_query.to_string())
     } else {
         Command::Create(input)
     }
@@ -81,40 +86,18 @@ fn complete_task(app: &mut App, query: &str) -> CommandResult {
     }
 }
 
-/// Handles input events and executes commands
-#[allow(clippy::needless_pass_by_value)]
-pub fn handle_input_event(app: &mut App, event: Event) {
-    if let Event::Key(key) = event {
-        match key.code {
-            KeyCode::Enter => {
-                let input = app.input.value().trim().to_string();
-                if input.is_empty() {
-                    execute_command(app, None);
-                } else {
-                    let command = parse_command(input);
-                    execute_command(app, Some(command));
-                }
-                app.input.reset();
-            }
-            _ => {
-                app.input.handle_event(&event);
-            }
-        }
-    }
-}
-
+/// Execute a create command
 fn execute_create_command(app: &mut App, content: &str) {
     let task = Task::new(app.next_id, content.to_string());
     app.next_id += 1;
     app.tasks.push(task);
-    app.log_activity(format!("Created task: {content}"));
-
-    // Save tasks after creating a new one
+    app.log_activity("Task added".to_string());
     if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
         log_debug(&format!("Failed to save tasks: {e}"));
     }
 }
 
+/// Execute a complete command
 fn execute_complete_command(app: &mut App, query: &str) {
     match complete_task(app, query) {
         CommandResult::TaskCompleted { content } => {
@@ -129,13 +112,12 @@ fn execute_complete_command(app: &mut App, query: &str) {
     }
 }
 
+/// Execute a delete command
 fn execute_delete_command(app: &mut App, query: &str) {
     if let Some(index) = find_task(app, query) {
         let content = app.tasks[index].content.clone();
         app.tasks.remove(index);
         app.log_activity(format!("Deleted task: {content}"));
-
-        // Save tasks after deleting one
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
@@ -144,6 +126,7 @@ fn execute_delete_command(app: &mut App, query: &str) {
     }
 }
 
+/// Execute a move command
 fn execute_move_command(app: &mut App, query: &str, target_container: TaskContainer) {
     if let Some(index) = find_task(app, query) {
         let task = &mut app.tasks[index];
@@ -156,28 +139,70 @@ fn execute_move_command(app: &mut App, query: &str, target_container: TaskContai
             let content = task.content.clone();
             let container_name = target_container.display_name();
             task.container = target_container;
-            app.log_activity(format!("Moved to {container_name}: {content}"));
 
             // Save tasks after moving one
             if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
                 log_debug(&format!("Failed to save tasks: {e}"));
             }
+
+            app.log_activity(format!("Moved task to {container_name}: {content}"));
         }
     } else {
         app.log_activity("No matching task found".to_string());
     }
 }
 
+/// Execute a move to taskpad command
 fn execute_move_to_taskpad_command(app: &mut App, query: &str) {
     execute_move_command(app, query, TaskContainer::Taskpad);
 }
 
+/// Execute a move to backburner command
 fn execute_move_to_backburner_command(app: &mut App, query: &str) {
     execute_move_command(app, query, TaskContainer::Backburner);
 }
 
+/// Execute a move to shelved command
 fn execute_move_to_shelved_command(app: &mut App, query: &str) {
     execute_move_command(app, query, TaskContainer::Shelved);
+}
+
+/// Result of focusing on a task
+enum FocusResult {
+    Focused { content: String },
+    NoMatchingTask,
+}
+
+/// Focuses on a task by content match or display index
+fn focus_task(app: &mut App, query: &str) -> FocusResult {
+    if let Some(index) = find_task(app, query) {
+        let task = &app.tasks[index];
+        let content = task.content.clone();
+        
+        // Find the display index for this task
+        if let Some(display_idx) = app.taskpad_state.get_display_index(task.id) {
+            app.taskpad_state.focused_index = Some(display_idx);
+            // Also update input buffer with task content
+            app.input = Input::new(content.clone());
+            FocusResult::Focused { content }
+        } else {
+            FocusResult::NoMatchingTask
+        }
+    } else {
+        FocusResult::NoMatchingTask
+    }
+}
+
+/// Executes the focus command
+fn execute_focus_command(app: &mut App, query: &str) {
+    match focus_task(app, query) {
+        FocusResult::Focused { content } => {
+            app.log_activity(format!("Focused on task: {}", content));
+        }
+        FocusResult::NoMatchingTask => {
+            app.log_activity("No matching task found".to_string());
+        }
+    }
 }
 
 /// Executes a command, updating the app state as needed
@@ -189,6 +214,16 @@ fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::MoveToTaskpad(query)) => execute_move_to_taskpad_command(app, &query),
         Some(Command::MoveToBackburner(query)) => execute_move_to_backburner_command(app, &query),
         Some(Command::MoveToShelved(query)) => execute_move_to_shelved_command(app, &query),
+        Some(Command::Focus(query)) => execute_focus_command(app, &query),
+        Some(Command::Edit(task_id, content)) => {
+            if let Some(task) = app.tasks.iter_mut().find(|t| t.id == task_id) {
+                task.update_content(content);
+                app.log_activity("Task updated".to_string());
+                if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
+                    log_debug(&format!("Failed to save tasks: {e}"));
+                }
+            }
+        }
         None => {
             app.log_activity("Invalid command".to_string());
         }
@@ -197,6 +232,62 @@ fn execute_command(app: &mut App, command: Option<Command>) {
     // Update display after any command
     app.taskpad_state.update_display_order(&app.tasks);
     app.show_help = false;
+}
+
+/// Handles input events and executes commands
+pub fn handle_input_event(app: &mut App, event: Event) {
+    match event {
+        Event::Key(key_event) => match key_event.code {
+            KeyCode::Up => {
+                app.taskpad_state.focus_previous();
+                match app.taskpad_state.focused_index {
+                    Some(0) => app.input.reset(),
+                    _ => if let Some(content) = app.taskpad_state.get_focused_task_content(&app.tasks) {
+                        app.input = Input::new(content.to_string());
+                    }
+                }
+            }
+            KeyCode::Down => {
+                app.taskpad_state.focus_next();
+                match app.taskpad_state.focused_index {
+                    Some(0) => app.input.reset(),
+                    _ => if let Some(content) = app.taskpad_state.get_focused_task_content(&app.tasks) {
+                        app.input = Input::new(content.to_string());
+                    }
+                }
+            }
+            KeyCode::Esc => app.taskpad_state.clear_focus(),
+            _ => {
+                app.input.handle_event(&Event::Key(key_event));
+                if key_event.code == KeyCode::Enter {
+                    let command = match app.taskpad_state.focused_index {
+                        Some(0) => {
+                            // At "Create new task" - parse as normal command
+                            let cmd = Some(parse_command(app.input.value().to_string()));
+                            app.input.reset();
+                            cmd
+                        }
+                        Some(idx) => {
+                            // At existing task - create edit command
+                            if let Some(task_id) = app.taskpad_state.get_task_id(idx) {
+                                Some(Command::Edit(task_id, app.input.value().to_string()))
+                            } else {
+                                None
+                            }
+                        }
+                        None => {
+                            // No focus - parse as normal command
+                            let cmd = Some(parse_command(app.input.value().to_string()));
+                            app.input.reset();
+                            cmd
+                        }
+                    };
+                    execute_command(app, command);
+                }
+            }
+        },
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -253,6 +344,10 @@ mod tests {
         // Test move to shelved command
         let cmd = parse_command("move to shelved Test task".to_string());
         assert!(matches!(cmd, Command::MoveToShelved(content) if content == "Test task"));
+
+        // Test focus command
+        let cmd = parse_command("focus Test task".to_string());
+        assert!(matches!(cmd, Command::Focus(content) if content == "Test task"));
 
         // Test with trailing spaces in task content
         let cmd = parse_command("complete Test task  ".to_string());
@@ -405,7 +500,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Taskpad);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved to taskpad: {}", content)
+            &format!("Moved task to taskpad: {}", content)
         );
     }
 
@@ -435,7 +530,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Backburner);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved to backburner: {}", content)
+            &format!("Moved task to backburner: {}", content)
         );
     }
 
@@ -466,7 +561,7 @@ mod tests {
         assert_eq!(app.tasks[0].container, TaskContainer::Shelved);
         assert_eq!(
             app.activity_log.latest_message().unwrap(),
-            &format!("Moved to shelved: {}", content)
+            &format!("Moved task to shelved: {}", content)
         );
     }
 
@@ -507,5 +602,47 @@ mod tests {
             app.activity_log.latest_message().unwrap(),
             "No matching task found"
         );
+    }
+
+    #[test]
+    fn test_focus_task_by_content() {
+        let mut app = setup_test_app();
+        app.taskpad_state.update_display_order(&app.tasks);
+        let result = focus_task(&mut app, "Buy groceries");
+        assert!(matches!(
+            result,
+            FocusResult::Focused { content } if content == "Buy groceries"
+        ));
+    }
+
+    #[test]
+    fn test_focus_task_by_index_updates_state() {
+        let mut app = setup_test_app();
+        app.taskpad_state.update_display_order(&app.tasks);
+        
+        let result = focus_task(&mut app, "1");
+        assert!(matches!(
+            result,
+            FocusResult::Focused { content } if content == "Buy groceries"
+        ));
+        assert_eq!(app.input.value(), "Buy groceries");
+        assert_eq!(app.taskpad_state.focused_index, Some(1));
+    }
+
+    #[test]
+    fn test_focus_task_updates_input() {
+        let mut app = setup_test_app();
+        app.taskpad_state.update_display_order(&app.tasks);
+        app.input = Input::new("previous input".to_string());
+        
+        focus_task(&mut app, "Buy groceries");
+        assert_eq!(app.input.value(), "Buy groceries");
+    }
+
+    #[test]
+    fn test_focus_nonexistent_task() {
+        let mut app = setup_test_app();
+        let result = focus_task(&mut app, "nonexistent task");
+        assert!(matches!(result, FocusResult::NoMatchingTask));
     }
 }

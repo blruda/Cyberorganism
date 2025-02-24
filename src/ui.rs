@@ -57,6 +57,8 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
 pub struct TaskpadState {
     /// Maps display positions to task IDs
     display_to_id: Vec<u32>,
+    /// Currently focused task index (0-based)
+    pub focused_index: Option<usize>,
 }
 
 impl Default for TaskpadState {
@@ -66,32 +68,39 @@ impl Default for TaskpadState {
 }
 
 impl TaskpadState {
-    /// Creates a new `TaskpadState`
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             display_to_id: Vec::new(),
+            focused_index: Some(0),  // Start focused on "Create new task"
         }
     }
 
     /// Updates the display order based on the current tasks.
     /// Only includes tasks in the taskpad container (not archived).
-    /// The display will show tasks as a numbered list starting from 1.
+    /// The display will show tasks as a numbered list starting from 1,
+    /// with a special "Create new task" entry at index 0.
     pub fn update_display_order(&mut self, tasks: &[Task]) {
         self.display_to_id = tasks
             .iter()
             .filter(|task| task.is_in_taskpad())
             .map(|task| task.id)
             .collect();
+        // Reset focus to 0 if it's beyond the new list length
+        if let Some(current) = self.focused_index {
+            if current > self.display_to_id.len() {
+                self.focused_index = Some(0);
+            }
+        }
         log_debug(&format!("Updated display order: {:?}", self.display_to_id));
     }
 
-    /// Gets a task ID from a 1-based display index
+    /// Gets a task ID from a 1-based display index.
+    /// Returns None for index 0 (Create new task) or invalid indices.
     pub fn get_task_id(&self, display_index: usize) -> Option<u32> {
         if display_index == 0 || display_index > self.display_to_id.len() {
             None
         } else {
-            let task_id = self.display_to_id.get(display_index - 1).copied();
-            task_id
+            self.display_to_id.get(display_index - 1).copied()
         }
     }
 
@@ -101,6 +110,56 @@ impl TaskpadState {
             .iter()
             .position(|&id| id == task_id)
             .map(|i| i + 1)
+    }
+
+    /// Returns the number of tasks in the display (excluding "Create new task" entry)
+    pub fn len(&self) -> usize {
+        self.display_to_id.len()
+    }
+
+    /// Returns true if there are no tasks in the display (may still have "Create new task" entry)
+    pub fn is_empty(&self) -> bool {
+        self.display_to_id.is_empty()
+    }
+
+    /// Focus the previous task (move up), with wrapping
+    pub fn focus_previous(&mut self) {
+        let max_index = self.display_to_id.len();
+        self.focused_index = Some(match self.focused_index {
+            Some(0) => max_index,  // Wrap to bottom
+            Some(current) => current - 1,
+            None => 0,  // Start at "Create new task"
+        });
+    }
+
+    /// Focus the next task (move down), with wrapping
+    pub fn focus_next(&mut self) {
+        let max_index = self.display_to_id.len();
+        self.focused_index = Some(match self.focused_index {
+            Some(current) if current >= max_index => 0,  // Wrap to top
+            Some(current) => current + 1,
+            None => 0,  // Start at "Create new task"
+        });
+    }
+
+    /// Clear the current focus
+    pub fn clear_focus(&mut self) {
+        self.focused_index = None;
+    }
+
+    /// Gets the content of the currently focused task.
+    /// Returns None if no task is focused or if the focused item is the "Create new task" entry.
+    pub fn get_focused_task_content<'a>(&self, tasks: &'a [Task]) -> Option<&'a str> {
+        match self.focused_index {
+            Some(0) => None, // "Create new task" entry
+            Some(idx) if idx <= self.display_to_id.len() => {
+                let task_id = self.display_to_id[idx - 1];
+                tasks.iter()
+                    .find(|task| task.id == task_id)
+                    .map(|task| task.content.as_str())
+            }
+            _ => None,
+        }
     }
 }
 
@@ -185,7 +244,7 @@ fn create_layout_constraints(input_height: u16, show_help: bool) -> Vec<Constrai
 }
 
 /// Format a single task line with index and truncation if needed
-fn format_task_line(idx: usize, task: &Task, available_width: usize) -> Line {
+fn format_task_line(idx: usize, task: &Task, available_width: usize, is_focused: bool) -> Line {
     let index = format!("{}. ", idx + 1);
     let index_width = index.len();
     let content_width = available_width.saturating_sub(index_width);
@@ -196,20 +255,52 @@ fn format_task_line(idx: usize, task: &Task, available_width: usize) -> Line {
         task.content.clone()
     };
 
-    Line::from(vec![Span::styled(
-        format!("{index}{content}"),
-        Style::default().fg(Color::Rgb(57, 255, 20)),
-    )])
+    let text = format!("{index}{content}");
+    let style = if is_focused {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Rgb(57, 255, 20))
+    } else {
+        Style::default().fg(Color::Rgb(57, 255, 20))
+    };
+
+    Line::from(vec![Span::styled(text, style)])
 }
 
 /// Create task lines for display
-fn create_task_lines(tasks: &[Task], available_width: usize) -> Vec<Line> {
-    tasks
-        .iter()
-        .filter(|task| task.is_in_taskpad())
-        .enumerate()
-        .map(|(idx, task)| format_task_line(idx, task, available_width))
-        .collect()
+fn create_task_lines(tasks: &[Task], available_width: usize, focused_index: Option<usize>) -> Vec<Line> {
+    let mut lines = Vec::new();
+    
+    // Add the "Create new task" entry at index 0
+    let create_task_style = if focused_index == Some(0) {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Rgb(57, 255, 20))
+    } else {
+        Style::default().fg(Color::Rgb(57, 255, 20))
+    };
+    lines.push(Line::from(vec![Span::styled(
+        "<Create new task>",
+        create_task_style,
+    )]));
+
+    // Add the actual tasks, with indices starting at 1
+    lines.extend(
+        tasks
+            .iter()
+            .filter(|task| task.is_in_taskpad())
+            .enumerate()
+            .map(|(idx, task)| {
+                format_task_line(
+                    idx,  // format_task_line already adds 1 for display
+                    task,
+                    available_width,
+                    Some(idx + 1) == focused_index, // +1 here since focus indices include "Create new task"
+                )
+            }),
+    );
+
+    lines
 }
 
 /// Create the tasks widget
@@ -292,7 +383,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .split(frame.size());
 
     // Render tasks
-    let task_lines = create_task_lines(&app.tasks, available_width);
+    let task_lines = create_task_lines(&app.tasks, available_width, app.taskpad_state.focused_index);
     let tasks_widget = create_tasks_widget(task_lines);
     frame.render_widget(tasks_widget, chunks[0]);
 
@@ -449,7 +540,7 @@ mod tests {
             created_at: now,
             status: TaskStatus::Todo,
         };
-        let line = format_task_line(0, &task, 20);
+        let line = format_task_line(0, &task, 20, false);
         assert!(line.spans[0].content.starts_with("1. Test task"));
 
         // Test task truncation
@@ -460,7 +551,7 @@ mod tests {
             created_at: now,
             status: TaskStatus::Todo,
         };
-        let line = format_task_line(0, &long_task, 20);
+        let line = format_task_line(0, &long_task, 20, false);
         assert!(
             line.spans[0].content.len() <= 20,
             "Line should be truncated to width"
@@ -478,7 +569,7 @@ mod tests {
             created_at: now,
             status: TaskStatus::Todo,
         };
-        let line = format_task_line(9, &numbered_task, 20); // Testing with index 10
+        let line = format_task_line(9, &numbered_task, 20, false); // Testing with index 10
         assert!(line.spans[0].content.starts_with("10. "));
     }
 
@@ -509,10 +600,11 @@ mod tests {
             },
         ];
 
-        let lines = create_task_lines(&tasks, 20);
-        assert_eq!(lines.len(), 2, "Should only include taskpad tasks");
-        assert!(lines[0].spans[0].content.contains("Task 1"));
-        assert!(lines[1].spans[0].content.contains("Task 3"));
+        let lines = create_task_lines(&tasks, 20, None);
+        assert_eq!(lines.len(), 3, "Should include 'Create new task' and two tasks");
+        assert!(lines[0].spans[0].content.contains("<Create new task>"));
+        assert!(lines[1].spans[0].content.contains("Task 1"));
+        assert!(lines[2].spans[0].content.contains("Task 3"));
     }
 
     #[test]

@@ -13,6 +13,7 @@ chrono = { version = "0.4", features = ["serde"] }  # Date and time handling
 unicode-segmentation = "1.10.1"  # Unicode grapheme handling
 tui-input = "0.8.0"    # Text input handling with proper cursor support
 fuzzy-matcher = "0.3.7"    # Fuzzy text matching
+regex = "1.11.1"
 
 [dev-dependencies]
 tempfile = "3.10.0"    # Temporary file handling for tests

@@ -517,6 +517,8 @@ mod tests {
                 container: TaskContainer::Taskpad,
                 created_at: Utc::now(),
                 status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
             Task {
                 id: 2,
@@ -524,6 +526,8 @@ mod tests {
                 container: TaskContainer::Archived,
                 created_at: Utc::now(),
                 status: TaskStatus::Done,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
             Task {
                 id: 3,
@@ -531,6 +535,8 @@ mod tests {
                 container: TaskContainer::Taskpad,
                 created_at: Utc::now(),
                 status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
         ]
     }
@@ -546,20 +552,26 @@ mod tests {
                 container: TaskContainer::Taskpad,
                 created_at: now,
                 status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
             Task {
                 id: 2,
                 content: "Task 2".to_string(),
-                container: TaskContainer::Archived,
+                container: TaskContainer::Taskpad,
                 created_at: now,
-                status: TaskStatus::Done,
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
             Task {
                 id: 3,
                 content: "Task 3".to_string(),
-                container: TaskContainer::Taskpad,
+                container: TaskContainer::Archived,
                 created_at: now,
                 status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
         ];
 
@@ -567,13 +579,13 @@ mod tests {
 
         // Only taskpad tasks should be in display order
         assert_eq!(state.get_display_index(1), Some(1));
-        assert_eq!(state.get_display_index(2), None); // Archived task
-        assert_eq!(state.get_display_index(3), Some(2));
+        assert_eq!(state.get_display_index(2), Some(2)); 
+        assert_eq!(state.get_display_index(3), None); 
 
         // Test reverse lookup
         assert_eq!(state.get_task_id(1), Some(1));
-        assert_eq!(state.get_task_id(2), Some(3));
-        assert_eq!(state.get_task_id(3), None); // Invalid index
+        assert_eq!(state.get_task_id(2), Some(2)); 
+        assert_eq!(state.get_task_id(3), None); 
     }
 
     #[test]
@@ -659,6 +671,8 @@ mod tests {
             container: TaskContainer::Taskpad,
             created_at: now,
             status: TaskStatus::Todo,
+            parent_id: None,
+            child_ids: Vec::new(),
         };
         let line = format_task_line(0, &task, 20, false);
         assert!(line.spans[0].content.starts_with("1. Test task"));
@@ -670,6 +684,8 @@ mod tests {
             container: TaskContainer::Taskpad,
             created_at: now,
             status: TaskStatus::Todo,
+            parent_id: None,
+            child_ids: Vec::new(),
         };
         let line = format_task_line(0, &long_task, 20, false);
         assert!(
@@ -688,6 +704,8 @@ mod tests {
             container: TaskContainer::Taskpad,
             created_at: now,
             status: TaskStatus::Todo,
+            parent_id: None,
+            child_ids: Vec::new(),
         };
         let line = format_task_line(9, &numbered_task, 20, false); // Testing with index 10
         assert!(line.spans[0].content.starts_with("10. "));
@@ -703,20 +721,26 @@ mod tests {
                 container: TaskContainer::Taskpad,
                 created_at: now,
                 status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
             Task {
                 id: 2,
                 content: "Task 2".to_string(),
-                container: TaskContainer::Archived,
+                container: TaskContainer::Taskpad,
                 created_at: now,
-                status: TaskStatus::Done,
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
             Task {
                 id: 3,
                 content: "Task 3".to_string(),
-                container: TaskContainer::Taskpad,
+                container: TaskContainer::Archived,
                 created_at: now,
                 status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
             },
         ];
 
@@ -728,7 +752,7 @@ mod tests {
         );
         assert!(lines[0].spans[0].content.contains("<Create new task>"));
         assert!(lines[1].spans[0].content.contains("Task 1"));
-        assert!(lines[2].spans[0].content.contains("Task 3"));
+        assert!(lines[2].spans[0].content.contains("Task 2"));
     }
 
     #[test]

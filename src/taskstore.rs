@@ -24,6 +24,10 @@ pub struct Task {
     pub container: TaskContainer,
     /// Current status of the task
     pub status: TaskStatus,
+    /// ID of the parent task if this is a subtask
+    pub parent_id: Option<u32>,
+    /// IDs of any subtasks this task has
+    pub child_ids: Vec<u32>,
 }
 
 impl Task {
@@ -35,6 +39,8 @@ impl Task {
             created_at: Utc::now(),
             container: TaskContainer::Taskpad,
             status: TaskStatus::Todo,
+            parent_id: None,
+            child_ids: Vec::new(),
         }
     }
 
@@ -57,6 +63,11 @@ impl Task {
     /// Returns the container this task is in
     pub const fn container(&self) -> &TaskContainer {
         &self.container
+    }
+
+    /// Adds a subtask to this task, setting up the parent-child relationship
+    pub fn add_subtask(&mut self, subtask_id: u32) {
+        self.child_ids.push(subtask_id);
     }
 }
 
@@ -218,6 +229,8 @@ mod tests {
         assert_eq!(task.content, "Test task");
         assert!(matches!(task.container, TaskContainer::Taskpad));
         assert!(matches!(task.status, TaskStatus::Todo));
+        assert!(task.parent_id.is_none());
+        assert!(task.child_ids.is_empty());
     }
 
     #[test]

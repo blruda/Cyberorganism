@@ -4,10 +4,11 @@
 use crossterm::event::{Event, KeyCode};
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use tui_input::backend::crossterm::EventHandler;
+use chrono::Utc;
 
 use crate::{
     debug::log_debug,
-    taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer},
+    taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer, TaskStatus},
     App,
 };
 
@@ -23,6 +24,7 @@ enum Command {
     Edit(u32, String),   // (task_id, new_content)
     Focus(String),       // Focus on a task by index or content
     Show(TaskContainer), // Switch active container
+    AddSubtask(u32, String), // (parent_id, subtask_content)
 }
 
 /// Parses the input string into a Command
@@ -48,6 +50,15 @@ fn parse_command(input: String) -> Command {
             "archived" => Command::Show(TaskContainer::Archived),
             _ => Command::Create(input), // Invalid container, treat as task creation
         }
+    } else if let Some(task_query) = input.strip_prefix("subtask ") {
+        // Format: "subtask <parent_id> <content>"
+        let parts: Vec<&str> = task_query.splitn(2, ' ').collect();
+        if parts.len() == 2 {
+            if let Ok(parent_id) = parts[0].parse::<u32>() {
+                return Command::AddSubtask(parent_id, parts[1].to_string());
+            }
+        }
+        Command::Create(input) // Invalid format, treat as task creation
     } else {
         Command::Create(input)
     }
@@ -269,6 +280,39 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
     }
 }
 
+/// Execute add subtask command
+fn execute_add_subtask(app: &mut App, parent_id: u32, content: String) {
+    // Find the parent task
+    if let Some(parent_idx) = find_task_by_id(&app.tasks, parent_id) {
+        // Create a new subtask
+        let subtask = Task {
+            id: app.next_id,
+            content: content.clone(),
+            created_at: Utc::now(),
+            container: TaskContainer::Taskpad,
+            status: TaskStatus::Todo,
+            parent_id: Some(parent_id),
+            child_ids: Vec::new(),
+        };
+        app.next_id += 1;
+        
+        // Add subtask ID to parent's child_ids
+        app.tasks[parent_idx].add_subtask(subtask.id);
+        
+        // Add the subtask to tasks list
+        app.tasks.push(subtask);
+        app.log_activity(format!("Added subtask to task {}: {}", parent_id, content));
+        
+        // Update display and save
+        app.display_container_state.update_display_order(&app.tasks);
+        if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
+            log_debug(&format!("Failed to save tasks: {e}"));
+        }
+    } else {
+        app.log_activity(format!("No task found with ID {parent_id}"));
+    }
+}
+
 /// Executes a command, updating the app state as needed
 fn execute_command(app: &mut App, command: Option<Command>) {
     match command {
@@ -282,6 +326,7 @@ fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::Focus(query)) => execute_focus_command(app, &query),
         Some(Command::Show(container)) => execute_show_command(app, container),
         Some(Command::Edit(task_id, content)) => execute_edit_command(app, task_id, content),
+        Some(Command::AddSubtask(parent_id, content)) => execute_add_subtask(app, parent_id, content),
         None => {
             app.activity_log.add_message("Invalid command".to_string());
         }
@@ -773,6 +818,41 @@ mod tests {
         assert_eq!(
             app.activity_log.latest_message(),
             Some("Showing backburner tasks")
+        );
+    }
+
+    #[test]
+    fn test_add_subtask_success() {
+        let mut app = setup_test_app();
+        let parent_id = 1; // From setup_test_app
+        let content = "Subtask content".to_string();
+
+        execute_add_subtask(&mut app, parent_id, content.clone());
+
+        // Verify subtask was created with correct parent reference
+        let subtask = app.tasks.last().unwrap();
+        assert_eq!(subtask.parent_id, Some(parent_id));
+        assert_eq!(subtask.content, content);
+
+        // Verify parent's child_ids was updated
+        let parent = app.tasks.iter().find(|t| t.id == parent_id).unwrap();
+        assert!(parent.child_ids.contains(&subtask.id));
+    }
+
+    #[test]
+    fn test_add_subtask_nonexistent_parent() {
+        let mut app = setup_test_app();
+        let invalid_parent_id = 999;
+        let content = "Subtask content".to_string();
+        let initial_task_count = app.tasks.len();
+
+        execute_add_subtask(&mut app, invalid_parent_id, content);
+
+        // Verify no task was created
+        assert_eq!(app.tasks.len(), initial_task_count);
+        assert_eq!(
+            app.activity_log.latest_message(),
+            Some(format!("No task found with ID {invalid_parent_id}").as_str())
         );
     }
 }

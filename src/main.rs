@@ -54,6 +54,31 @@ impl App {
     pub fn log_activity(&mut self, message: String) {
         self.activity_log.add_message(message);
     }
+
+    /// Remove a task from the task list and update display order
+    pub fn remove_task(&mut self, index: usize) {
+        taskstore::operations::remove_task(&mut self.tasks, index);
+        self.display_container_state.update_display_order(&self.tasks);
+    }
+
+    /// Add a task to the task list and update display order
+    pub fn add_task(&mut self, task: Task) {
+        taskstore::operations::add_task(&mut self.tasks, task);
+        self.display_container_state.update_display_order(&self.tasks);
+    }
+
+    /// Update a task in the task list and update display order
+    pub fn update_task<F>(&mut self, index: usize, update_fn: F) 
+    where F: FnOnce(&mut Task) {
+        taskstore::operations::update_task(&mut self.tasks, index, update_fn);
+        self.display_container_state.update_display_order(&self.tasks);
+    }
+
+    /// Remove a child from a parent task and update display order
+    pub fn remove_child_from_parent(&mut self, parent_index: usize, child_id: u32) {
+        taskstore::operations::remove_child_from_parent(&mut self.tasks, parent_index, child_id);
+        self.display_container_state.update_display_order(&self.tasks);
+    }
 }
 
 /// Runs the application, setting up the terminal,

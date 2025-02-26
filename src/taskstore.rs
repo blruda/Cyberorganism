@@ -107,6 +107,33 @@ pub enum TaskStatus {
     Done,
 }
 
+/// Low-level task operations that don't update display state
+pub mod operations {
+    use super::*;
+
+    /// Remove a task from the task list (does not update display)
+    pub fn remove_task(tasks: &mut Vec<Task>, index: usize) {
+        tasks.remove(index);
+    }
+
+    /// Add a task to the task list (does not update display)
+    pub fn add_task(tasks: &mut Vec<Task>, task: Task) {
+        tasks.push(task);
+    }
+
+    /// Update a task in the task list (does not update display)
+    pub fn update_task(tasks: &mut Vec<Task>, index: usize, update_fn: impl FnOnce(&mut Task)) {
+        update_fn(&mut tasks[index]);
+    }
+
+    /// Remove a child from a parent task (does not update display)
+    pub fn remove_child_from_parent(tasks: &mut Vec<Task>, parent_index: usize, child_id: u32) {
+        if let Some(child_index) = tasks[parent_index].child_ids.iter().position(|&id| id == child_id) {
+            tasks[parent_index].child_ids.remove(child_index);
+        }
+    }
+}
+
 /// Finds a task in a slice of tasks by its ID
 pub fn find_task_by_id(tasks: &[Task], id: u32) -> Option<usize> {
     tasks.iter().position(|task| task.id == id)
@@ -211,55 +238,49 @@ pub fn load_tasks(path: &str) -> std::io::Result<Vec<Task>> {
 
 #[cfg(test)]
 pub struct TaskBuilder {
-    id: u32,
-    content: String,
-    container: TaskContainer,
-    parent_id: Option<u32>,
-    child_ids: Vec<u32>,
+    task: Task,
 }
 
 #[cfg(test)]
 impl TaskBuilder {
     pub fn new(id: u32) -> Self {
         Self {
-            id,
-            content: format!("Task {}", id),
-            container: TaskContainer::Taskpad,
-            parent_id: None,
-            child_ids: Vec::new(),
+            task: Task {
+                id,
+                content: format!("Task {}", id),
+                created_at: Utc::now(),
+                container: TaskContainer::Taskpad,
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
         }
     }
 
     pub fn content(mut self, content: impl Into<String>) -> Self {
-        self.content = content.into();
+        self.task.content = content.into();
         self
     }
 
     pub fn container(mut self, container: TaskContainer) -> Self {
-        self.container = container;
+        self.task.container = container;
         self
     }
 
+    #[allow(dead_code)]
     pub fn parent(mut self, parent_id: u32) -> Self {
-        self.parent_id = Some(parent_id);
+        self.task.parent_id = Some(parent_id);
         self
     }
 
+    #[allow(dead_code)]
     pub fn children(mut self, child_ids: Vec<u32>) -> Self {
-        self.child_ids = child_ids;
+        self.task.child_ids = child_ids;
         self
     }
 
     pub fn build(self) -> Task {
-        Task {
-            id: self.id,
-            content: self.content,
-            created_at: Utc::now(),
-            container: self.container,
-            status: TaskStatus::Todo,
-            parent_id: self.parent_id,
-            child_ids: self.child_ids,
-        }
+        self.task
     }
 }
 
@@ -316,6 +337,18 @@ mod tests {
         assert_eq!(find_task_by_id(&tasks, 1), Some(0));
         assert_eq!(find_task_by_id(&tasks, 2), Some(1));
         assert_eq!(find_task_by_id(&tasks, 99), None);
+    }
+
+    #[test]
+    fn test_find_task_by_id_with_multiple_tasks() {
+        let mut tasks = vec![];
+        operations::add_task(&mut tasks, TaskBuilder::new(4).content("Important meeting").build());
+        let archived_task = TaskBuilder::new(5).content("Archived task").container(TaskContainer::Archived).build();
+        operations::add_task(&mut tasks, archived_task);
+
+        assert_eq!(find_task_by_id(&tasks, 4), Some(0));
+        assert_eq!(find_task_by_id(&tasks, 5), Some(1));
+        assert_eq!(find_task_by_id(&tasks, 6), None);
     }
 
     #[test]

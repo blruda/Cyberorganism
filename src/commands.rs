@@ -147,7 +147,7 @@ fn complete_task(app: &mut App, query: &str, task_id: Option<u32>) -> CommandRes
 fn execute_create_command(app: &mut App, content: &str) {
     let task = Task::new(app.next_id, content.to_string());
     app.next_id += 1;
-    app.tasks.push(task);
+    app.add_task(task);
     app.log_activity("Task added".to_string());
     if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
         log_debug(&format!("Failed to save tasks: {e}"));
@@ -197,16 +197,11 @@ fn execute_delete_command(app: &mut App, query: &str) {
         // If this task has a parent, remove it from the parent's child_ids
         if let Some(parent_id) = task.parent_id {
             if let Some(parent_index) = app.tasks.iter().position(|t| t.id == parent_id) {
-                if let Some(child_index) = app.tasks[parent_index].child_ids.iter().position(|&id| id == task_id) {
-                    app.tasks[parent_index].child_ids.remove(child_index);
-                }
+                app.remove_child_from_parent(parent_index, task_id);
             }
         }
         
-        app.tasks.remove(index);
-        // Update display order immediately after modifying task list
-        app.display_container_state.update_display_order(&app.tasks);
-        
+        app.remove_task(index);
         app.log_activity(format!("Deleted task: {content}"));
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
@@ -306,8 +301,10 @@ fn execute_focus_command(app: &mut App, query: &str) {
 
 /// Execute edit command
 fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
-    if let Some(task) = app.tasks.iter_mut().find(|t| t.id == task_id) {
-        task.update_content(content);
+    if let Some(_task) = app.tasks.iter_mut().find(|t| t.id == task_id) {
+        app.update_task(app.tasks.iter().position(|t| t.id == task_id).unwrap(), |task| {
+            task.update_content(content);
+        });
         app.activity_log.add_message("Task updated".to_string());
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
@@ -338,11 +335,10 @@ fn execute_add_subtask(app: &mut App, parent_id: u32, content: String) {
         app.tasks[parent_idx].add_subtask(subtask.id);
         
         // Add the subtask to tasks list
-        app.tasks.push(subtask);
+        app.add_task(subtask);
         app.log_activity(format!("Added subtask to task {}: {}", parent_id, content));
         
-        // Update display and save
-        app.display_container_state.update_display_order(&app.tasks);
+        // Save updated task list
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
@@ -497,9 +493,9 @@ mod tests {
 
         let mut app = App::default();
         app.tasks_file = tasks_file;
-        app.tasks.push(Task::new(1, "Buy groceries".to_string()));
-        app.tasks.push(Task::new(2, "Call dentist".to_string()));
-        app.tasks.push(Task::new(3, "Write report".to_string()));
+        app.add_task(Task::new(1, "Buy groceries".to_string()));
+        app.add_task(Task::new(2, "Call dentist".to_string()));
+        app.add_task(Task::new(3, "Write report".to_string()));
         app.next_id = 4;
         app
     }

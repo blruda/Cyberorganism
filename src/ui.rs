@@ -360,11 +360,6 @@ impl TaskIndex {
             .join(".")
     }
 
-    /// Get the top-level index (first number in the path)
-    pub fn top_level(&self) -> usize {
-        self.path[0]
-    }
-
     pub fn path(&self) -> &[usize] {
         &self.path
     }

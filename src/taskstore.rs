@@ -210,15 +210,69 @@ pub fn load_tasks(path: &str) -> std::io::Result<Vec<Task>> {
 }
 
 #[cfg(test)]
+pub struct TaskBuilder {
+    id: u32,
+    content: String,
+    container: TaskContainer,
+    parent_id: Option<u32>,
+    child_ids: Vec<u32>,
+}
+
+#[cfg(test)]
+impl TaskBuilder {
+    pub fn new(id: u32) -> Self {
+        Self {
+            id,
+            content: format!("Task {}", id),
+            container: TaskContainer::Taskpad,
+            parent_id: None,
+            child_ids: Vec::new(),
+        }
+    }
+
+    pub fn content(mut self, content: impl Into<String>) -> Self {
+        self.content = content.into();
+        self
+    }
+
+    pub fn container(mut self, container: TaskContainer) -> Self {
+        self.container = container;
+        self
+    }
+
+    pub fn parent(mut self, parent_id: u32) -> Self {
+        self.parent_id = Some(parent_id);
+        self
+    }
+
+    pub fn children(mut self, child_ids: Vec<u32>) -> Self {
+        self.child_ids = child_ids;
+        self
+    }
+
+    pub fn build(self) -> Task {
+        Task {
+            id: self.id,
+            content: self.content,
+            created_at: Utc::now(),
+            container: self.container,
+            status: TaskStatus::Todo,
+            parent_id: self.parent_id,
+            child_ids: self.child_ids,
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
 
     fn setup_test_tasks() -> Vec<Task> {
         vec![
-            Task::new(1, "Buy groceries".to_string()),
-            Task::new(2, "Call dentist".to_string()),
-            Task::new(3, "Write report".to_string()),
+            TaskBuilder::new(1).content("Buy groceries").build(),
+            TaskBuilder::new(2).content("Call dentist").build(),
+            TaskBuilder::new(3).content("Write report").build(),
         ]
     }
 
@@ -282,8 +336,8 @@ mod tests {
     fn test_find_task_by_content_prioritizes_active_container() {
         let mut tasks = setup_test_tasks();
         // Create two tasks with similar content, one in taskpad and one archived
-        tasks.push(Task::new(4, "Important meeting".to_string()));
-        let mut archived_task = Task::new(5, "Important meeting".to_string()); // Exact same content
+        tasks.push(TaskBuilder::new(4).content("Important meeting").build());
+        let mut archived_task = TaskBuilder::new(5).content("Important meeting").build(); // Exact same content
         archived_task.complete(); // This moves it to archived
         tasks.push(archived_task);
 

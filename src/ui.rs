@@ -13,7 +13,6 @@ use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Paragraph, Wrap},
 };
-use std::collections::BTreeMap;
 use std::io;
 use tui_input::Input;
 
@@ -162,31 +161,35 @@ impl DisplayContainerState {
         
         // Parse the display path (e.g., "1.2.3" -> [1,2,3])
         let display_path = TaskIndex::from_str(display_path_str).ok()?;
+        let path = display_path.path();
         
-        // Convert 1-based top-level index to 0-based
-        let top_level_pos = display_path.top_level().checked_sub(1)?;
-        log_debug(&format!("Top level position (0-based): {}", top_level_pos));
+        // Get all visible top-level tasks
+        let visible_tasks: Vec<&Task> = tasks
+            .iter()
+            .filter(|t| t.container == self.active_container && t.parent_id.is_none())
+            .collect();
         
-        // Get the task at this display position
-        let task_id = self.display_to_id.get(top_level_pos)?;
-        let mut current_task = tasks.iter().find(|t| t.id == *task_id)?;
-        log_debug(&format!("Found task at display position {}: {}", top_level_pos, task_id));
+        // Get the first task using the first index (1-based)
+        let first_pos = path[0].checked_sub(1)?;
+        let mut current_task = *visible_tasks.get(first_pos)?;
+        log_debug(&format!("Found top-level task at position {}: {}", first_pos, current_task.id));
         
-        // For each subsequent index in the path, find the child at that display position
-        for &child_display_pos in &display_path.path()[1..] {
-            // Convert 1-based index to 0-based
-            let child_pos = child_display_pos.checked_sub(1)?;
-            
-            // Get all visible children of the current task
-            let mut visible_children = Vec::new();
-            for &child_id in &current_task.child_ids {
-                if let Some(child) = tasks.iter().find(|t| t.id == child_id) {
-                    visible_children.push(child);
-                }
+        // For each subsequent index in the path, find the child at that position
+        for &child_display_pos in &path[1..] {
+            // Only proceed if the current task is expanded
+            if !self.is_task_expanded(current_task.id) {
+                return None;
             }
             
-            // Get the child at the display position
-            current_task = visible_children.get(child_pos)?;
+            let child_pos = child_display_pos.checked_sub(1)?;
+            
+            let visible_children: Vec<&Task> = current_task.child_ids
+                .iter()
+                .filter_map(|&id| tasks.iter().find(|t| t.id == id))
+                .collect();
+            
+            current_task = *visible_children.get(child_pos)?;
+            log_debug(&format!("Found child at position {}: {}", child_pos, current_task.id));
         }
         
         Some(current_task.id)
@@ -311,7 +314,17 @@ impl DisplayContainerState {
 
     /// Collapse all tasks
     pub fn collapse_all(&mut self) {
-        self.folded_tasks.clear();
+        self.folded_tasks = self.display_to_id.iter().cloned().collect();
+    }
+
+    /// Fold a specific task
+    pub fn fold_task(&mut self, task_id: u32) {
+        self.folded_tasks.insert(task_id);
+    }
+
+    /// Fold a list of tasks
+    pub fn fold_tasks(&mut self, task_ids: &[u32]) {
+        self.folded_tasks.extend(task_ids.iter().copied());
     }
 }
 
@@ -357,59 +370,6 @@ impl TaskIndex {
     }
 }
 
-/// A tree-based data structure for task navigation.
-/// Currently not in use as update_display_order already handles tree-like lookup.
-/// Keeping this implementation in case we need true tree search algorithm efficiency in the future.
-#[allow(dead_code)]
-struct DisplayNode {
-    /// The task ID for this node
-    task_id: u32,
-    /// Children of this task, indexed by their position (1-based)
-    children: BTreeMap<usize, DisplayNode>,
-}
-
-#[allow(dead_code)]
-impl DisplayNode {
-    fn new(task_id: u32) -> Self {
-        DisplayNode {
-            task_id,
-            children: BTreeMap::new(),
-        }
-    }
-
-    /// Find a task by following a path of indices
-    fn find_by_path(&self, path: &[usize]) -> Option<u32> {
-        if path.is_empty() {
-            Some(self.task_id)
-        } else {
-            let [index, rest @ ..] = path else {
-                return None;
-            };
-            self.children.get(index).and_then(|child| child.find_by_path(rest))
-        }
-    }
-
-    /// Insert a task at the given path
-    fn insert(&mut self, path: &[usize], task_id: u32) {
-        if path.is_empty() {
-            return;
-        }
-
-        let [index, rest @ ..] = path else {
-            return;
-        };
-
-        let child = self.children
-            .entry(*index)
-            .or_insert_with(|| DisplayNode::new(task_id));
-
-        if rest.is_empty() {
-            child.task_id = task_id;
-        } else {
-            child.insert(rest, task_id);
-        }
-    }
-}
 
 /// Maintains a log of user activities and commands
 #[derive(Default)]
@@ -765,55 +725,124 @@ mod tests {
     use crate::taskstore::{Task, TaskContainer, TaskStatus};
     use chrono::Utc;
 
-    fn setup_test_tasks() -> Vec<Task> {
-        vec![
-            Task {
-                id: 1,
-                content: "Task 1".to_string(),
+    pub struct TaskBuilder {
+        id: u32,
+        content: String,
+        container: TaskContainer,
+        created_at: chrono::DateTime<Utc>,
+        status: TaskStatus,
+        parent_id: Option<u32>,
+        child_ids: Vec<u32>,
+    }
+
+    impl TaskBuilder {
+        pub fn new(id: u32) -> Self {
+            Self {
+                id,
+                content: String::new(),
                 container: TaskContainer::Taskpad,
                 created_at: Utc::now(),
                 status: TaskStatus::Todo,
                 parent_id: None,
                 child_ids: Vec::new(),
-            },
+            }
+        }
+
+        pub fn content(mut self, content: &str) -> Self {
+            self.content = content.to_string();
+            self
+        }
+
+        pub fn container(mut self, container: TaskContainer) -> Self {
+            self.container = container;
+            self
+        }
+
+        pub fn parent(mut self, parent_id: u32) -> Self {
+            self.parent_id = Some(parent_id);
+            self
+        }
+
+        pub fn children(mut self, child_ids: Vec<u32>) -> Self {
+            self.child_ids = child_ids;
+            self
+        }
+
+        pub fn build(self) -> Task {
             Task {
-                id: 2,
-                content: "Task 2".to_string(),
-                container: TaskContainer::Archived,
-                created_at: Utc::now(),
-                status: TaskStatus::Done,
-                parent_id: None,
-                child_ids: Vec::new(),
-            },
-            Task {
-                id: 3,
-                content: "Task 3".to_string(),
-                container: TaskContainer::Taskpad,
-                created_at: Utc::now(),
-                status: TaskStatus::Todo,
-                parent_id: None,
-                child_ids: Vec::new(),
-            },
-        ]
+                id: self.id,
+                content: self.content,
+                container: self.container,
+                created_at: self.created_at,
+                status: self.status,
+                parent_id: self.parent_id,
+                child_ids: self.child_ids,
+            }
+        }
     }
 
     #[test]
     fn test_taskpad_display_order() {
         let mut state = DisplayContainerState::new();
-        let tasks = setup_test_tasks();
+        let tasks = vec![
+            TaskBuilder::new(1).children(vec![3]).build(),
+            TaskBuilder::new(2).container(TaskContainer::Archived).build(),
+            TaskBuilder::new(3).content("Task 1.1").parent(1).build(),
+        ];
 
-        // Initially empty
+        // Start with task 1 folded
+        state.fold_task(1);
         state.update_display_order(&tasks);
-        assert_eq!(state.len(), 2);
+        // println!("Initial display_to_id: {:?}", state.display_to_id);
+        // println!("Initial len: {}", state.len());
+        // println!("Task 1's children: {:?}", tasks[0].child_ids);
+        // println!("Task 1 expanded? {}", state.is_task_expanded(1));
+        assert_eq!(state.len(), 1);  // Only task 1 is visible
         assert_eq!(state.get_task_id_by_path("1", &tasks), Some(1));
-        assert_eq!(state.get_task_id_by_path("2", &tasks), Some(3)); 
-        assert_eq!(state.get_task_id_by_path("3", &tasks), None); 
+        assert_eq!(state.get_task_id_by_path("1.1", &tasks), None);  // Not visible until parent is expanded
+
+        // After expanding task 1, its child becomes visible
+        state.toggle_task_expansion(1);
+        // println!("\nAfter expansion:");
+        // println!("Task 1 expanded? {}", state.is_task_expanded(1));
+        state.update_display_order(&tasks);
+        // println!("display_to_id after expansion: {:?}", state.display_to_id);
+        // println!("len after expansion: {}", state.len());
+        assert_eq!(state.len(), 2);  // Now both task 1 and task 3 are visible
+        assert_eq!(state.get_task_id_by_path("1", &tasks), Some(1));
+        assert_eq!(state.get_task_id_by_path("1.1", &tasks), Some(3));
 
         // Change container to archive
         state.active_container = TaskContainer::Archived;
         state.update_display_order(&tasks);
-        assert_eq!(state.len(), 1);
+        // println!("\nAfter archive:");
+        // println!("display_to_id in archive: {:?}", state.display_to_id);
+        // println!("len in archive: {}", state.len());
+        assert_eq!(state.len(), 1);  // Only task 2 is visible
         assert_eq!(state.get_task_id_by_path("1", &tasks), Some(2));
+    }
+
+    #[test]
+    fn test_get_task_id_by_path() {
+        let tasks = vec![
+            TaskBuilder::new(7).children(vec![9]).build(),
+            TaskBuilder::new(6).build(),
+            TaskBuilder::new(9).content("Task 1.1").parent(7).build(),
+        ];
+
+        let mut display = DisplayContainerState::default();
+        display.active_container = TaskContainer::Taskpad;
+        
+        // Test that we find tasks by their position in the hierarchy,
+        // not by their position in display_to_id
+        assert_eq!(display.get_task_id_by_path("1", &tasks), Some(7));   // First top-level task
+        assert_eq!(display.get_task_id_by_path("2", &tasks), Some(6));   // Second top-level task
+        assert_eq!(display.get_task_id_by_path("1.1", &tasks), Some(9)); // First subtask of first task
+        
+        // Test invalid paths
+        assert_eq!(display.get_task_id_by_path("3", &tasks), None);      // Non-existent top-level task
+        assert_eq!(display.get_task_id_by_path("1.2", &tasks), None);    // Non-existent subtask
+        assert_eq!(display.get_task_id_by_path("2.1", &tasks), None);    // Subtask of task with no children
     }
 
     #[test]
@@ -1037,7 +1066,35 @@ mod tests {
     #[test]
     fn test_input_matches_focused_task() {
         let mut state = DisplayContainerState::new();
-        let tasks = setup_test_tasks();
+        let tasks = vec![
+            Task {
+                id: 1,
+                content: "Task 1".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+            Task {
+                id: 2,
+                content: "Task 2".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+            Task {
+                id: 3,
+                content: "Task 3".to_string(),
+                container: TaskContainer::Archived,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+        ];
 
         // Initially at "Create new task", input should be empty
         state.update_display_order(&tasks);
@@ -1053,15 +1110,43 @@ mod tests {
         // Focus on second task, input should update
         state.focused_index = Some(2);
         state.update_input_for_focus(&tasks);
-        assert_eq!(state.input_value(), "Task 3");
+        assert_eq!(state.input_value(), "Task 2");
     }
 
     #[test]
     fn test_input_updates_when_display_changes() {
         let mut state = DisplayContainerState::new();
-        let mut tasks = setup_test_tasks();
+        let mut tasks = vec![
+            Task {
+                id: 1,
+                content: "Task 1".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+            Task {
+                id: 2,
+                content: "Task 2".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+            Task {
+                id: 3,
+                content: "Task 3".to_string(),
+                container: TaskContainer::Archived,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+        ];
 
-        // Focus on first task
+        // Focus on a task
         state.update_display_order(&tasks);
         state.focused_index = Some(1);
         state.update_input_for_focus(&tasks);
@@ -1071,13 +1156,41 @@ mod tests {
         tasks[0].container = TaskContainer::Backburner;
         state.update_display_order(&tasks);
         state.update_input_for_focus(&tasks);
-        assert_eq!(state.input_value(), "Task 3");
+        assert_eq!(state.input_value(), "Task 2");
     }
 
     #[test]
     fn test_input_resets_when_focus_invalid() {
         let mut state = DisplayContainerState::new();
-        let mut tasks = setup_test_tasks();
+        let mut tasks = vec![
+            Task {
+                id: 1,
+                content: "Task 1".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+            Task {
+                id: 2,
+                content: "Task 2".to_string(),
+                container: TaskContainer::Taskpad,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+            Task {
+                id: 3,
+                content: "Task 3".to_string(),
+                container: TaskContainer::Archived,
+                created_at: Utc::now(),
+                status: TaskStatus::Todo,
+                parent_id: None,
+                child_ids: Vec::new(),
+            },
+        ];
 
         // Focus on a task
         state.update_display_order(&tasks);
@@ -1094,53 +1207,5 @@ mod tests {
 
         // Input should reset
         assert_eq!(state.input_value(), "");
-    }
-
-    #[test]
-    fn test_get_task_id_by_path() {
-        // Create some test tasks
-        let tasks = vec![
-            Task {
-                id: 1,
-                content: "Task 1".to_string(),
-                created_at: Utc::now(),
-                container: TaskContainer::Taskpad,
-                status: TaskStatus::Todo,
-                parent_id: None,
-                child_ids: vec![3],
-            },
-            Task {
-                id: 2,
-                content: "Task 2".to_string(),
-                created_at: Utc::now(),
-                container: TaskContainer::Taskpad,
-                status: TaskStatus::Todo,
-                parent_id: None,
-                child_ids: vec![],
-            },
-            Task {
-                id: 3,
-                content: "Task 1.1".to_string(),
-                created_at: Utc::now(),
-                container: TaskContainer::Taskpad,
-                status: TaskStatus::Todo,
-                parent_id: Some(1),
-                child_ids: vec![],
-            },
-        ];
-
-        // Create display state where Task 1 is at position 1, Task 2 at position 2
-        let mut display = DisplayContainerState::default();
-        display.display_to_id = vec![1, 2]; // 0-based indices, so "1" and "2" in display
-
-        // Test cases
-        assert_eq!(display.get_task_id_by_path("1", &tasks), Some(1));   // First top-level task
-        assert_eq!(display.get_task_id_by_path("2", &tasks), Some(2));   // Second top-level task
-        assert_eq!(display.get_task_id_by_path("1.1", &tasks), Some(3)); // First subtask of first task
-        
-        // Test invalid paths
-        assert_eq!(display.get_task_id_by_path("3", &tasks), None);      // Non-existent top-level task
-        assert_eq!(display.get_task_id_by_path("1.2", &tasks), None);    // Non-existent subtask
-        assert_eq!(display.get_task_id_by_path("2.1", &tasks), None);    // Subtask of task with no children
     }
 }

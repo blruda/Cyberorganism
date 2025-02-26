@@ -204,6 +204,9 @@ fn execute_delete_command(app: &mut App, query: &str) {
         }
         
         app.tasks.remove(index);
+        // Update display order immediately after modifying task list
+        app.display_container_state.update_display_order(&app.tasks);
+        
         app.log_activity(format!("Deleted task: {content}"));
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));

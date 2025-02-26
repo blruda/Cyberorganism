@@ -1,3 +1,6 @@
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::wildcard_imports)]
+
 //! Core data structures and persistence layer for cyberorganism. Handles task
 //! representation, serialization, and file-based storage operations.
 
@@ -122,13 +125,17 @@ pub mod operations {
     }
 
     /// Update a task in the task list (does not update display)
-    pub fn update_task(tasks: &mut Vec<Task>, index: usize, update_fn: impl FnOnce(&mut Task)) {
+    pub fn update_task(tasks: &mut [Task], index: usize, update_fn: impl FnOnce(&mut Task)) {
         update_fn(&mut tasks[index]);
     }
 
     /// Remove a child from a parent task (does not update display)
-    pub fn remove_child_from_parent(tasks: &mut Vec<Task>, parent_index: usize, child_id: u32) {
-        if let Some(child_index) = tasks[parent_index].child_ids.iter().position(|&id| id == child_id) {
+    pub fn remove_child_from_parent(tasks: &mut [Task], parent_index: usize, child_id: u32) {
+        if let Some(child_index) = tasks[parent_index]
+            .child_ids
+            .iter()
+            .position(|&id| id == child_id)
+        {
             tasks[parent_index].child_ids.remove(child_index);
         }
     }
@@ -286,6 +293,7 @@ impl TaskBuilder {
 
 #[cfg(test)]
 mod tests {
+    #[allow(clippy::wildcard_imports)]
     use super::*;
     use tempfile::tempdir;
 
@@ -342,8 +350,14 @@ mod tests {
     #[test]
     fn test_find_task_by_id_with_multiple_tasks() {
         let mut tasks = vec![];
-        operations::add_task(&mut tasks, TaskBuilder::new(4).content("Important meeting").build());
-        let archived_task = TaskBuilder::new(5).content("Archived task").container(TaskContainer::Archived).build();
+        operations::add_task(
+            &mut tasks,
+            TaskBuilder::new(4).content("Important meeting").build(),
+        );
+        let archived_task = TaskBuilder::new(5)
+            .content("Archived task")
+            .container(TaskContainer::Archived)
+            .build();
         operations::add_task(&mut tasks, archived_task);
 
         assert_eq!(find_task_by_id(&tasks, 4), Some(0));

@@ -1,5 +1,7 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::wildcard_imports)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::items_after_statements)]
 
 //! Terminal user interface implementation using ratatui. Manages terminal setup,
 //! teardown, and rendering of the task management interface.
@@ -13,6 +15,7 @@ use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use std::fmt;
 use std::io;
 use tui_input::Input;
 
@@ -64,7 +67,7 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
 pub struct DisplayContainerState {
     /// List of task IDs for top-level tasks in the current container.
     /// This is used primarily for UI display purposes (e.g., focus navigation)
-    /// and should NOT be used for task lookup - use get_task_id_by_path instead.
+    /// and should NOT be used for task lookup - use `get_task_id_by_path` instead.
     pub display_to_id: Vec<u32>,
     /// Currently focused task index (0-based)
     pub focused_index: Option<usize>,
@@ -109,12 +112,18 @@ impl DisplayContainerState {
 
         // First, collect all top-level tasks
         let mut display_ids = Vec::new();
-        for task in tasks.iter().filter(|t| t.container == self.active_container) {
+        for task in tasks
+            .iter()
+            .filter(|t| t.container == self.active_container)
+        {
             // Only include top-level tasks
             if task.parent_id.is_none() {
-                log_debug(&format!("Adding top-level task {} to display_to_id", task.id));
+                log_debug(&format!(
+                    "Adding top-level task {} to display_to_id",
+                    task.id
+                ));
                 display_ids.push(task.id);
-                
+
                 // If this task is expanded, add its children
                 if self.is_task_expanded(task.id) {
                     // Add all children recursively
@@ -122,8 +131,8 @@ impl DisplayContainerState {
                 }
             }
         }
-        
-        log_debug(&format!("Final display_to_id: {:?}", display_ids));
+
+        log_debug(&format!("Final display_to_id: {display_ids:?}"));
         self.display_to_id = display_ids;
 
         // Reset focus to 0 if it's beyond the new list length
@@ -157,41 +166,50 @@ impl DisplayContainerState {
     /// - "1.2" means the second child of the first top-level task
     pub fn get_task_id_by_path(&self, display_path_str: &str, tasks: &[Task]) -> Option<u32> {
         use crate::debug::log_debug;
-        log_debug(&format!("Looking up task by display path: {}", display_path_str));
-        
+        log_debug(&format!(
+            "Looking up task by display path: {display_path_str}"
+        ));
+
         // Parse the display path (e.g., "1.2.3" -> [1,2,3])
         let display_path = TaskIndex::from_str(display_path_str).ok()?;
         let path = display_path.path();
-        
+
         // Get all visible top-level tasks
         let visible_tasks: Vec<&Task> = tasks
             .iter()
             .filter(|t| t.container == self.active_container && t.parent_id.is_none())
             .collect();
-        
+
         // Get the first task using the first index (1-based)
         let first_pos = path[0].checked_sub(1)?;
         let mut current_task = *visible_tasks.get(first_pos)?;
-        log_debug(&format!("Found top-level task at position {}: {}", first_pos, current_task.id));
-        
+        log_debug(&format!(
+            "Found top-level task at position {}: {}",
+            first_pos, current_task.id
+        ));
+
         // For each subsequent index in the path, find the child at that position
         for &child_display_pos in &path[1..] {
             // Only proceed if the current task is expanded
             if !self.is_task_expanded(current_task.id) {
                 return None;
             }
-            
+
             let child_pos = child_display_pos.checked_sub(1)?;
-            
-            let visible_children: Vec<&Task> = current_task.child_ids
+
+            let visible_children: Vec<&Task> = current_task
+                .child_ids
                 .iter()
                 .filter_map(|&id| tasks.iter().find(|t| t.id == id))
                 .collect();
-            
+
             current_task = *visible_children.get(child_pos)?;
-            log_debug(&format!("Found child at position {}: {}", child_pos, current_task.id));
+            log_debug(&format!(
+                "Found child at position {}: {}",
+                child_pos, current_task.id
+            ));
         }
-        
+
         Some(current_task.id)
     }
 
@@ -314,7 +332,7 @@ impl DisplayContainerState {
 
     /// Collapse all tasks
     pub fn collapse_all(&mut self) {
-        self.folded_tasks = self.display_to_id.iter().cloned().collect();
+        self.folded_tasks = self.display_to_id.iter().copied().collect();
     }
 
     /// Fold a specific task
@@ -329,35 +347,26 @@ impl DisplayContainerState {
 }
 
 /// Represents a hierarchical task index like "1.2.3"
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskIndex {
     /// Path to the task, e.g. [1, 2, 3] for "1.2.3"
     path: Vec<usize>,
 }
 
 impl TaskIndex {
-    /// Create a new TaskIndex from a string like "1.2.3"
+    /// Create a new `TaskIndex` from a string like "1.2.3"
     pub fn from_str(s: &str) -> Result<Self, String> {
-        let path: Result<Vec<usize>, _> = s
-            .trim_end_matches('.')
-            .split('.')
-            .map(|part| part.parse::<usize>())
-            .collect();
-        
+        let path: Result<Vec<usize>, _> =
+            s.trim_end_matches('.').split('.').map(str::parse).collect();
+
         match path {
             Ok(path) if path.is_empty() => Err("Empty task index".to_string()),
-            Ok(path) if path.iter().any(|&x| x == 0) => Err("Task indices must be positive".to_string()),
-            Ok(path) => Ok(TaskIndex { path }),
+            Ok(path) if path.iter().any(|&x| x == 0) => {
+                Err("Task indices must be positive".to_string())
+            }
+            Ok(path) => Ok(Self { path }),
             Err(_) => Err("Invalid task index format".to_string()),
         }
-    }
-
-    /// Convert to string representation
-    pub fn to_string(&self) -> String {
-        self.path.iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>()
-            .join(".")
     }
 
     pub fn path(&self) -> &[usize] {
@@ -365,6 +374,19 @@ impl TaskIndex {
     }
 }
 
+impl fmt::Display for TaskIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.path
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(".")
+        )
+    }
+}
 
 /// Maintains a log of user activities and commands
 #[derive(Default)]
@@ -459,7 +481,7 @@ fn format_task_line<'a>(
     let indent = "  ".repeat(depth); // Two spaces per level
 
     // Add task index
-    spans.push(Span::raw(format!("{}{}", indent, task_index.to_string())));
+    spans.push(Span::raw(format!("{indent}{task_index}")));
     spans.push(Span::raw(". "));
 
     // Add completion status indicator
@@ -479,9 +501,14 @@ fn format_task_line<'a>(
 
     // Calculate remaining width for task content
     let prefix_width = indent.len() + task_index.to_string().len() + 2; // index + ". "
-    let status_width = if task.status == TaskStatus::Done { 2 } else { 0 }; // "✓ "
+    let status_width = if task.status == TaskStatus::Done {
+        2
+    } else {
+        0
+    }; // "✓ "
     let indicator_width = if task.child_ids.is_empty() { 0 } else { 2 }; // "▼ " or "▶ "
-    let content_width = available_width.saturating_sub(prefix_width + status_width + indicator_width);
+    let content_width =
+        available_width.saturating_sub(prefix_width + status_width + indicator_width);
 
     // Add task content
     let content = if task.content.len() > content_width {
@@ -511,9 +538,7 @@ fn create_task_lines<'a>(
 
     // Add the "Create new task" entry at index 0
     let create_task_style = if focused_index == Some(0) {
-        Style::default()
-            .fg(Color::Black)
-            .bg(ACCENT_COLOR)
+        Style::default().fg(Color::Black).bg(ACCENT_COLOR)
     } else {
         Style::default().fg(ACCENT_COLOR)
     };
@@ -523,6 +548,7 @@ fn create_task_lines<'a>(
     )]));
 
     // Helper function to recursively add tasks and their subtasks
+    #[allow(clippy::too_many_arguments)]
     fn add_task_lines<'a>(
         task: &'a Task,
         current_index: &mut Vec<usize>,
@@ -534,8 +560,10 @@ fn create_task_lines<'a>(
         lines: &mut Vec<Line<'a>>,
     ) {
         // Create TaskIndex for current task
-        let task_index = TaskIndex { path: current_index.clone() };
-        
+        let task_index = TaskIndex {
+            path: current_index.clone(),
+        };
+
         // Add the current task
         lines.push(format_task_line(
             &task_index,
@@ -570,9 +598,7 @@ fn create_task_lines<'a>(
     // Add top-level tasks and their subtasks
     for (idx, task) in tasks
         .iter()
-        .filter(|task| {
-            task.container == display_state.active_container && task.parent_id.is_none()
-        })
+        .filter(|task| task.container == display_state.active_container && task.parent_id.is_none())
         .enumerate()
     {
         let mut current_index = vec![idx + 1]; // 1-based index
@@ -610,20 +636,14 @@ fn create_activity_log_widget(message: &str) -> Paragraph<'_> {
 /// Create the help widget
 fn create_help_widget() -> Paragraph<'static> {
     Paragraph::new(vec![Line::from(vec![
-        Span::styled(
-            "Press ".to_string(),
-            Style::default().fg(ACCENT_COLOR),
-        ),
+        Span::styled("Press ".to_string(), Style::default().fg(ACCENT_COLOR)),
         Span::styled(
             "esc".to_string(),
             Style::default()
                 .fg(ACCENT_COLOR)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            " or ".to_string(),
-            Style::default().fg(ACCENT_COLOR),
-        ),
+        Span::styled(" or ".to_string(), Style::default().fg(ACCENT_COLOR)),
         Span::styled(
             "ctrl-c".to_string(),
             Style::default()
@@ -781,7 +801,9 @@ mod tests {
         let mut state = DisplayContainerState::new();
         let tasks = vec![
             TaskBuilder::new(1).children(vec![3]).build(),
-            TaskBuilder::new(2).container(TaskContainer::Archived).build(),
+            TaskBuilder::new(2)
+                .container(TaskContainer::Archived)
+                .build(),
             TaskBuilder::new(3).content("Task 1.1").parent(1).build(),
         ];
 
@@ -792,9 +814,9 @@ mod tests {
         // println!("Initial len: {}", state.len());
         // println!("Task 1's children: {:?}", tasks[0].child_ids);
         // println!("Task 1 expanded? {}", state.is_task_expanded(1));
-        assert_eq!(state.len(), 1);  // Only task 1 is visible
+        assert_eq!(state.len(), 1); // Only task 1 is visible
         assert_eq!(state.get_task_id_by_path("1", &tasks), Some(1));
-        assert_eq!(state.get_task_id_by_path("1.1", &tasks), None);  // Not visible until parent is expanded
+        assert_eq!(state.get_task_id_by_path("1.1", &tasks), None); // Not visible until parent is expanded
 
         // After expanding task 1, its child becomes visible
         state.toggle_task_expansion(1);
@@ -803,7 +825,7 @@ mod tests {
         state.update_display_order(&tasks);
         // println!("display_to_id after expansion: {:?}", state.display_to_id);
         // println!("len after expansion: {}", state.len());
-        assert_eq!(state.len(), 2);  // Now both task 1 and task 3 are visible
+        assert_eq!(state.len(), 2); // Now both task 1 and task 3 are visible
         assert_eq!(state.get_task_id_by_path("1", &tasks), Some(1));
         assert_eq!(state.get_task_id_by_path("1.1", &tasks), Some(3));
 
@@ -813,7 +835,7 @@ mod tests {
         // println!("\nAfter archive:");
         // println!("display_to_id in archive: {:?}", state.display_to_id);
         // println!("len in archive: {}", state.len());
-        assert_eq!(state.len(), 1);  // Only task 2 is visible
+        assert_eq!(state.len(), 1); // Only task 2 is visible
         assert_eq!(state.get_task_id_by_path("1", &tasks), Some(2));
     }
 
@@ -827,17 +849,17 @@ mod tests {
 
         let mut display = DisplayContainerState::default();
         display.active_container = TaskContainer::Taskpad;
-        
+
         // Test that we find tasks by their position in the hierarchy,
         // not by their position in display_to_id
-        assert_eq!(display.get_task_id_by_path("1", &tasks), Some(7));   // First top-level task
-        assert_eq!(display.get_task_id_by_path("2", &tasks), Some(6));   // Second top-level task
+        assert_eq!(display.get_task_id_by_path("1", &tasks), Some(7)); // First top-level task
+        assert_eq!(display.get_task_id_by_path("2", &tasks), Some(6)); // Second top-level task
         assert_eq!(display.get_task_id_by_path("1.1", &tasks), Some(9)); // First subtask of first task
-        
+
         // Test invalid paths
-        assert_eq!(display.get_task_id_by_path("3", &tasks), None);      // Non-existent top-level task
-        assert_eq!(display.get_task_id_by_path("1.2", &tasks), None);    // Non-existent subtask
-        assert_eq!(display.get_task_id_by_path("2.1", &tasks), None);    // Subtask of task with no children
+        assert_eq!(display.get_task_id_by_path("3", &tasks), None); // Non-existent top-level task
+        assert_eq!(display.get_task_id_by_path("1.2", &tasks), None); // Non-existent subtask
+        assert_eq!(display.get_task_id_by_path("2.1", &tasks), None); // Subtask of task with no children
     }
 
     #[test]
@@ -1019,12 +1041,7 @@ mod tests {
             },
         ];
 
-        let lines = create_task_lines(
-            &tasks,
-            &display_state,
-            20,
-            None,
-        );
+        let lines = create_task_lines(&tasks, &display_state, 20, None);
         assert_eq!(
             lines.len(),
             3,
@@ -1033,8 +1050,16 @@ mod tests {
         assert!(lines[0].spans[0].content.contains("<Create new task>"));
 
         // Check task lines by combining their spans
-        let task1_content: String = lines[1].spans.iter().map(|span| &span.content[..]).collect();
-        let task2_content: String = lines[2].spans.iter().map(|span| &span.content[..]).collect();
+        let task1_content: String = lines[1]
+            .spans
+            .iter()
+            .map(|span| &span.content[..])
+            .collect();
+        let task2_content: String = lines[2]
+            .spans
+            .iter()
+            .map(|span| &span.content[..])
+            .collect();
         assert!(task1_content.contains("1. Task 1"));
         assert!(task2_content.contains("2. Task 2"));
     }

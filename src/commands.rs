@@ -1,14 +1,16 @@
 //! Input handling and command processing for cyberorganism. Translates user
 //! keyboard input into task management operations.
 
+use chrono::Utc;
 use crossterm::event::{Event, KeyCode};
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use tui_input::backend::crossterm::EventHandler;
-use chrono::Utc;
 
 use crate::{
     debug::log_debug,
-    taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer, TaskStatus},
+    taskstore::{
+        find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer, TaskStatus,
+    },
     App,
 };
 
@@ -21,9 +23,9 @@ enum Command {
     MoveToTaskpad(String),
     MoveToBackburner(String),
     MoveToShelved(String),
-    Edit(u32, String),   // (task_id, new_content)
-    Focus(String),       // Focus on a task by index or content
-    Show(TaskContainer), // Switch active container
+    Edit(u32, String),       // (task_id, new_content)
+    Focus(String),           // Focus on a task by index or content
+    Show(TaskContainer),     // Switch active container
     AddSubtask(u32, String), // (parent_id, subtask_content)
 }
 
@@ -73,34 +75,40 @@ enum CommandResult {
 
 /// Finds a task by display index (including dot notation) or content match
 fn find_task(app: &App, query: &str) -> Option<usize> {
-    use regex::Regex;
     use crate::debug::log_debug;
+    use regex::Regex;
     let query = query.trim();
-    
-    log_debug(&format!("Finding task with query: {}", query));
+
+    log_debug(&format!("Finding task with query: {query}"));
 
     // Check for dot notation pattern (e.g., "1.2.3" or "1.2.")
     let dot_pattern = Regex::new(r"^\d+(\.\d+)*\.?$").unwrap();
     if dot_pattern.is_match(query) {
         // Remove trailing dot if present
         let clean_query = query.trim_end_matches('.');
-        log_debug(&format!("Trying dot notation path: {}", clean_query));
-        if let Some(task_id) = app.display_container_state.get_task_id_by_path(clean_query, &app.tasks) {
-            log_debug(&format!("Found task by path, id: {}", task_id));
+        log_debug(&format!("Trying dot notation path: {clean_query}"));
+        if let Some(task_id) = app
+            .display_container_state
+            .get_task_id_by_path(clean_query, &app.tasks)
+        {
+            log_debug(&format!("Found task by path, id: {task_id}"));
             return find_task_by_id(&app.tasks, task_id);
         }
-        log_debug(&format!("No task at path {}", clean_query));
+        log_debug(&format!("No task at path {clean_query}"));
     }
     // Check for simple index (backwards compatibility)
     else if query.chars().all(|c| c.is_ascii_digit()) {
         if let Ok(index) = query.parse::<usize>() {
-            log_debug(&format!("Trying simple index: {}", index));
+            log_debug(&format!("Trying simple index: {index}"));
             // Convert single number to dot notation
-            if let Some(task_id) = app.display_container_state.get_task_id_by_path(&index.to_string(), &app.tasks) {
-                log_debug(&format!("Found task by simple index, id: {}", task_id));
+            if let Some(task_id) = app
+                .display_container_state
+                .get_task_id_by_path(&index.to_string(), &app.tasks)
+            {
+                log_debug(&format!("Found task by simple index, id: {task_id}"));
                 return find_task_by_id(&app.tasks, task_id);
             }
-            log_debug(&format!("No task at index {}", index));
+            log_debug(&format!("No task at index {index}"));
         }
     }
 
@@ -193,14 +201,14 @@ fn execute_delete_command(app: &mut App, query: &str) {
         let task = &app.tasks[index];
         let content = task.content.clone();
         let task_id = task.id;
-        
+
         // If this task has a parent, remove it from the parent's child_ids
         if let Some(parent_id) = task.parent_id {
             if let Some(parent_index) = app.tasks.iter().position(|t| t.id == parent_id) {
                 app.remove_child_from_parent(parent_index, task_id);
             }
         }
-        
+
         app.remove_task(index);
         app.log_activity(format!("Deleted task: {content}"));
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
@@ -302,9 +310,12 @@ fn execute_focus_command(app: &mut App, query: &str) {
 /// Execute edit command
 fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
     if let Some(_task) = app.tasks.iter_mut().find(|t| t.id == task_id) {
-        app.update_task(app.tasks.iter().position(|t| t.id == task_id).unwrap(), |task| {
-            task.update_content(content);
-        });
+        app.update_task(
+            app.tasks.iter().position(|t| t.id == task_id).unwrap(),
+            |task| {
+                task.update_content(content);
+            },
+        );
         app.activity_log.add_message("Task updated".to_string());
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
@@ -316,13 +327,13 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
 }
 
 /// Execute add subtask command
-fn execute_add_subtask(app: &mut App, parent_id: u32, content: String) {
+fn execute_add_subtask(app: &mut App, parent_id: u32, content: &str) {
     // Find the parent task
     if let Some(parent_idx) = find_task_by_id(&app.tasks, parent_id) {
         // Create a new subtask
         let subtask = Task {
             id: app.next_id,
-            content: content.clone(),
+            content: content.to_string(),
             created_at: Utc::now(),
             container: TaskContainer::Taskpad,
             status: TaskStatus::Todo,
@@ -330,14 +341,14 @@ fn execute_add_subtask(app: &mut App, parent_id: u32, content: String) {
             child_ids: Vec::new(),
         };
         app.next_id += 1;
-        
+
         // Add subtask ID to parent's child_ids
         app.tasks[parent_idx].add_subtask(subtask.id);
-        
+
         // Add the subtask to tasks list
         app.add_task(subtask);
-        app.log_activity(format!("Added subtask to task {}: {}", parent_id, content));
-        
+        app.log_activity(format!("Added subtask to task {parent_id}: {content}"));
+
         // Save updated task list
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
@@ -360,7 +371,9 @@ fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::Focus(query)) => execute_focus_command(app, &query),
         Some(Command::Show(container)) => execute_show_command(app, container),
         Some(Command::Edit(task_id, content)) => execute_edit_command(app, task_id, content),
-        Some(Command::AddSubtask(parent_id, content)) => execute_add_subtask(app, parent_id, content),
+        Some(Command::AddSubtask(parent_id, content)) => {
+            execute_add_subtask(app, parent_id, &content)
+        }
         None => {
             app.activity_log.add_message("Invalid command".to_string());
         }
@@ -859,9 +872,9 @@ mod tests {
     fn test_add_subtask_success() {
         let mut app = setup_test_app();
         let parent_id = 1; // From setup_test_app
-        let content = "Subtask content".to_string();
+        let content = "Subtask content";
 
-        execute_add_subtask(&mut app, parent_id, content.clone());
+        execute_add_subtask(&mut app, parent_id, content);
 
         // Verify subtask was created with correct parent reference
         let subtask = app.tasks.last().unwrap();
@@ -877,7 +890,7 @@ mod tests {
     fn test_add_subtask_nonexistent_parent() {
         let mut app = setup_test_app();
         let invalid_parent_id = 999;
-        let content = "Subtask content".to_string();
+        let content = "Subtask content";
         let initial_task_count = app.tasks.len();
 
         execute_add_subtask(&mut app, invalid_parent_id, content);
@@ -893,27 +906,42 @@ mod tests {
     #[test]
     fn test_delete_subtask_updates_parent() {
         let mut app = setup_test_app();
-        
+
         // Create a parent task
         execute_create_command(&mut app, "Parent task");
         let parent_id = app.tasks.last().unwrap().id;
-        
+
         // Create a child task
-        execute_add_subtask(&mut app, parent_id, "Child task".to_string());
-        let child_id = app.tasks.last().unwrap().id;
-        
+        execute_add_subtask(&mut app, parent_id, "Child task");
+
         // Verify initial state
         let parent_index = app.tasks.iter().position(|t| t.id == parent_id).unwrap();
-        assert!(app.tasks[parent_index].child_ids.contains(&child_id), "Child task should be in parent's child_ids");
-        
+        assert!(
+            app.tasks[parent_index]
+                .child_ids
+                .contains(&app.tasks.last().unwrap().id),
+            "Child task should be in parent's child_ids"
+        );
+
         // Delete the child task
         execute_delete_command(&mut app, "Child task");
-        
+
         // Verify the child is removed from parent's child_ids
         let parent_index = app.tasks.iter().position(|t| t.id == parent_id).unwrap();
-        assert!(!app.tasks[parent_index].child_ids.contains(&child_id), "Child task should be removed from parent's child_ids");
-        
+        assert!(
+            !app.tasks[parent_index]
+                .child_ids
+                .contains(&app.tasks.last().unwrap().id),
+            "Child task should be removed from parent's child_ids"
+        );
+
         // Verify the child task is actually deleted
-        assert!(app.tasks.iter().find(|t| t.id == child_id).is_none(), "Child task should be deleted");
+        assert!(
+            app.tasks
+                .iter()
+                .find(|t| t.content == "Child task")
+                .is_none(),
+            "Child task should be deleted"
+        );
     }
 }

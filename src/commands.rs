@@ -22,6 +22,7 @@ pub enum Command {
     Focus(String),           // Focus on a task by index or content
     Show(TaskContainer),     // Switch active container
     AddSubtask(String, String), // (parent_query, subtask_content)
+    Toggle(String),          // Toggle expansion state of a task
 }
 
 /// Parses the input string into a Command
@@ -39,6 +40,8 @@ fn parse_command(input: String) -> Command {
         Command::MoveToShelved(task_query.to_string())
     } else if let Some(task_query) = input.strip_prefix("focus ") {
         Command::Focus(task_query.to_string())
+    } else if let Some(task_query) = input.strip_prefix("toggle ") {
+        Command::Toggle(task_query.to_string())
     } else if let Some(container) = input.strip_prefix("show ") {
         match container {
             "taskpad" => Command::Show(TaskContainer::Taskpad),
@@ -344,12 +347,23 @@ fn execute_add_subtask(app: &mut App, query: &str, content: &str) {
     }
 }
 
+/// Execute toggle expansion command
+fn execute_toggle_command(app: &mut App, query: &str) {
+    if let Some(index) = find_task(app, query) {
+        let task_id = app.tasks[index].id;
+        app.display_container_state.toggle_task_expansion(task_id);
+        app.log_activity(format!("Toggled task: {}", app.tasks[index].content));
+    } else {
+        app.log_activity("No matching task found".to_string());
+    }
+}
+
 /// Executes a command, updating the app state as needed
 pub fn execute_command(app: &mut App, command: Option<Command>) {
     match command {
         Some(Command::Create(content)) => execute_create_command(app, &content),
         Some(Command::Complete(query)) => execute_complete_command(app, &query),
-        Some(Command::CompleteById(task_id)) => execute_complete_by_id_command(app, task_id),
+        Some(Command::CompleteById(id)) => execute_complete_by_id_command(app, id),
         Some(Command::Delete(query)) => execute_delete_command(app, &query),
         Some(Command::MoveToTaskpad(query)) => execute_move_to_taskpad_command(app, &query),
         Some(Command::MoveToBackburner(query)) => execute_move_to_backburner_command(app, &query),
@@ -360,6 +374,7 @@ pub fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::AddSubtask(query, content)) => {
             execute_add_subtask(app, &query, &content)
         }
+        Some(Command::Toggle(query)) => execute_toggle_command(app, &query),
         None => {
             app.activity_log.add_message("Invalid command".to_string());
         }
@@ -531,6 +546,15 @@ mod tests {
         // Test with trailing spaces in task content
         let cmd = parse_command("complete Test task  ".to_string());
         assert!(matches!(cmd, Command::Complete(content) if content == "Test task  "));
+
+        // Test toggle command
+        let cmd = parse_command("toggle Test task".to_string());
+        assert!(matches!(cmd, Command::Toggle(content) if content == "Test task"));
+
+        // Test subtask command
+        let cmd = parse_command("subtask 1 subtask content".to_string());
+        assert!(matches!(cmd, Command::AddSubtask(parent, content) 
+            if parent == "1" && content == "subtask content"));
     }
 
     #[test]
@@ -923,6 +947,49 @@ mod tests {
                 .find(|t| t.content == "Child task")
                 .is_none(),
             "Child task should be deleted"
+        );
+    }
+
+    #[test]
+    fn test_toggle_task_expansion() {
+        let mut app = setup_test_app();
+        let query = "Buy groceries";
+        
+        // Initially, the task should not be in the folded_tasks set
+        let task_index = find_task(&app, query).unwrap();
+        let task_id = app.tasks[task_index].id;
+        assert!(!app.display_container_state.folded_tasks.contains(&task_id));
+        
+        // Toggle the task expansion
+        execute_toggle_command(&mut app, query);
+        
+        // Now the task should be in the folded_tasks set
+        assert!(app.display_container_state.folded_tasks.contains(&task_id));
+        
+        // Toggle again
+        execute_toggle_command(&mut app, query);
+        
+        // Now the task should not be in the folded_tasks set
+        assert!(!app.display_container_state.folded_tasks.contains(&task_id));
+        
+        // Verify activity log message
+        assert_eq!(
+            app.activity_log.latest_message(),
+            Some(format!("Toggled expansion state for task: {}", query).as_str())
+        );
+    }
+    
+    #[test]
+    fn test_toggle_nonexistent_task() {
+        let mut app = setup_test_app();
+        let invalid_query = "nonexistent task";
+        
+        execute_toggle_command(&mut app, invalid_query);
+        
+        // Verify activity log message
+        assert_eq!(
+            app.activity_log.latest_message(),
+            Some("No matching task found")
         );
     }
 }

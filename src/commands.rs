@@ -2,20 +2,15 @@
 //! keyboard input into task management operations.
 
 use chrono::Utc;
-use crossterm::event::{Event, KeyCode, KeyEvent};
-use device_query::{DeviceQuery, DeviceState, Keycode};
+use crossterm::event::{Event, KeyCode};
 use tui_input::backend::crossterm::EventHandler;
 
-use crate::{
-    debug::log_debug,
-    taskstore::{
-        find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer, TaskStatus,
-    },
-    App,
-};
+use crate::debug::log_debug;
+use crate::taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer, TaskStatus};
+use crate::App;
 
 /// Commands that can be executed by the user
-enum Command {
+pub enum Command {
     Create(String),
     Complete(String),
     CompleteById(u32),
@@ -75,40 +70,31 @@ enum CommandResult {
 
 /// Finds a task by display index (including dot notation) or content match
 fn find_task(app: &App, query: &str) -> Option<usize> {
-    use crate::debug::log_debug;
     use regex::Regex;
     let query = query.trim();
-
-    log_debug(&format!("Finding task with query: {query}"));
 
     // Check for dot notation pattern (e.g., "1.2.3" or "1.2.")
     let dot_pattern = Regex::new(r"^\d+(\.\d+)*\.?$").unwrap();
     if dot_pattern.is_match(query) {
         // Remove trailing dot if present
         let clean_query = query.trim_end_matches('.');
-        log_debug(&format!("Trying dot notation path: {clean_query}"));
         if let Some(task_id) = app
             .display_container_state
             .get_task_id_by_path(clean_query, &app.tasks)
         {
-            log_debug(&format!("Found task by path, id: {task_id}"));
             return find_task_by_id(&app.tasks, task_id);
         }
-        log_debug(&format!("No task at path {clean_query}"));
     }
     // Check for simple index (backwards compatibility)
     else if query.chars().all(|c| c.is_ascii_digit()) {
         if let Ok(index) = query.parse::<usize>() {
-            log_debug(&format!("Trying simple index: {index}"));
             // Convert single number to dot notation
             if let Some(task_id) = app
                 .display_container_state
                 .get_task_id_by_path(&index.to_string(), &app.tasks)
             {
-                log_debug(&format!("Found task by simple index, id: {task_id}"));
                 return find_task_by_id(&app.tasks, task_id);
             }
-            log_debug(&format!("No task at index {index}"));
         }
     }
 
@@ -359,7 +345,7 @@ fn execute_add_subtask(app: &mut App, parent_id: u32, content: &str) {
 }
 
 /// Executes a command, updating the app state as needed
-fn execute_command(app: &mut App, command: Option<Command>) {
+pub fn execute_command(app: &mut App, command: Option<Command>) {
     match command {
         Some(Command::Create(content)) => execute_create_command(app, &content),
         Some(Command::Complete(query)) => execute_complete_command(app, &query),
@@ -389,12 +375,7 @@ fn execute_command(app: &mut App, command: Option<Command>) {
 pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
         Event::Key(key_event) => {
-            // First check if we need to handle any special key combinations with device_query
-            if handle_device_query_keybindings(app, key_event) {
-                return;
-            }
-
-            // Then handle regular key events with match statements
+            // Handle regular key events with match statements
             match key_event.code {
                 // Navigation keys
                 KeyCode::Up | KeyCode::Down | KeyCode::Esc => {
@@ -422,40 +403,6 @@ pub fn handle_input_event(app: &mut App, event: Event) {
         }
         _ => {} // Ignore non-keyboard events
     }
-}
-
-/// Handle special key combinations using device_query
-/// Returns true if a key combination was handled
-fn handle_device_query_keybindings(app: &mut App, key_event: KeyEvent) -> bool {
-    // Check for Ctrl+Enter
-    if key_event.code == KeyCode::Enter {
-        let device_state = DeviceState::new();
-        let keys: Vec<Keycode> = device_state.get_keys();
-        
-        if keys.contains(&Keycode::LControl) || keys.contains(&Keycode::RControl) {
-            let input = app.display_container_state.input_value().to_string();
-            if !input.is_empty() && app.display_container_state.focused_index.is_some() {
-                match app.display_container_state.focused_index {
-                    Some(0) | None => {
-                        execute_command(app, Some(Command::Complete(input)));
-                    }
-                    Some(idx) => {
-                        if let Some(task_id) = app.display_container_state
-                            .display_to_id
-                            .get(idx - 1)
-                            .copied() 
-                        {
-                            execute_command(app, Some(Command::Edit(task_id, input.clone())));
-                            execute_command(app, Some(Command::CompleteById(task_id)));
-                        }
-                    }
-                }
-                return true;
-            }
-        }
-    }
-    
-    false
 }
 
 /// Handle basic navigation keys

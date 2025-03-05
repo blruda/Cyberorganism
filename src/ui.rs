@@ -104,12 +104,6 @@ impl DisplayContainerState {
     /// - Only top-level tasks are shown by default
     /// - Subtasks are shown only when their parent is expanded
     pub fn update_display_order(&mut self, tasks: &[Task]) {
-        use crate::debug::log_debug;
-        log_debug(&format!(
-            "Updating display for container: {:?}",
-            self.active_container
-        ));
-
         // First, collect all top-level tasks
         let mut display_ids = Vec::new();
         for task in tasks
@@ -118,10 +112,6 @@ impl DisplayContainerState {
         {
             // Only include top-level tasks
             if task.parent_id.is_none() {
-                log_debug(&format!(
-                    "Adding top-level task {} to display_to_id",
-                    task.id
-                ));
                 display_ids.push(task.id);
 
                 // If this task is expanded, add its children
@@ -132,7 +122,6 @@ impl DisplayContainerState {
             }
         }
 
-        log_debug(&format!("Final display_to_id: {display_ids:?}"));
         self.display_to_id = display_ids;
 
         // Reset focus to 0 if it's beyond the new list length
@@ -165,11 +154,6 @@ impl DisplayContainerState {
     /// - "1" means the first top-level task
     /// - "1.2" means the second child of the first top-level task
     pub fn get_task_id_by_path(&self, display_path_str: &str, tasks: &[Task]) -> Option<u32> {
-        use crate::debug::log_debug;
-        log_debug(&format!(
-            "Looking up task by display path: {display_path_str}"
-        ));
-
         // Parse the display path (e.g., "1.2.3" -> [1,2,3])
         let display_path = TaskIndex::from_str(display_path_str).ok()?;
         let path = display_path.path();
@@ -183,10 +167,6 @@ impl DisplayContainerState {
         // Get the first task using the first index (1-based)
         let first_pos = path[0].checked_sub(1)?;
         let mut current_task = *visible_tasks.get(first_pos)?;
-        log_debug(&format!(
-            "Found top-level task at position {}: {}",
-            first_pos, current_task.id
-        ));
 
         // For each subsequent index in the path, find the child at that position
         for &child_display_pos in &path[1..] {
@@ -204,10 +184,6 @@ impl DisplayContainerState {
                 .collect();
 
             current_task = *visible_children.get(child_pos)?;
-            log_debug(&format!(
-                "Found child at position {}: {}",
-                child_pos, current_task.id
-            ));
         }
 
         Some(current_task.id)

@@ -4,6 +4,7 @@
 
 mod commands;
 mod debug;
+mod keyhandler;
 mod taskstore;
 mod ui;
 
@@ -120,10 +121,25 @@ fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
 ) -> io::Result<()> {
+    // Initialize the key combination tracker with a moderate debounce
+    let mut key_tracker = keyhandler::KeyCombinationTracker::new(100);
+    
+    // Use a moderate polling timeout to balance responsiveness and stability
+    let polling_timeout = Duration::from_millis(33); // ~30 fps
+    
     loop {
+        // Draw the UI
         terminal.draw(|f| ui::draw(f, &app))?;
 
-        if event::poll(Duration::from_millis(100))? {
+        // Check for device_query key combinations
+        let combination = key_tracker.check_combinations();
+        if keyhandler::handle_key_combination(&mut app, combination) {
+            // Don't immediately continue - instead, proceed to the event polling
+            // This prevents bypassing the debounce mechanism
+        }
+
+        // Poll for crossterm events with a short timeout
+        if event::poll(polling_timeout)? {
             let event = event::read()?;
             if let Event::Key(key) = event {
                 if key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL

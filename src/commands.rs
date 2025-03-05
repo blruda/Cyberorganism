@@ -21,7 +21,7 @@ pub enum Command {
     Edit(u32, String),       // (task_id, new_content)
     Focus(String),           // Focus on a task by index or content
     Show(TaskContainer),     // Switch active container
-    AddSubtask(u32, String), // (parent_id, subtask_content)
+    AddSubtask(String, String), // (parent_query, subtask_content)
 }
 
 /// Parses the input string into a Command
@@ -48,12 +48,10 @@ fn parse_command(input: String) -> Command {
             _ => Command::Create(input), // Invalid container, treat as task creation
         }
     } else if let Some(task_query) = input.strip_prefix("subtask ") {
-        // Format: "subtask <parent_id> <content>"
+        // Format: "subtask <parent_query> <content>"
         let parts: Vec<&str> = task_query.splitn(2, ' ').collect();
         if parts.len() == 2 {
-            if let Ok(parent_id) = parts[0].parse::<u32>() {
-                return Command::AddSubtask(parent_id, parts[1].to_string());
-            }
+            return Command::AddSubtask(parts[0].to_string(), parts[1].to_string());
         }
         Command::Create(input) // Invalid format, treat as task creation
     } else {
@@ -313,9 +311,11 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
 }
 
 /// Execute add subtask command
-fn execute_add_subtask(app: &mut App, parent_id: u32, content: &str) {
-    // Find the parent task
-    if let Some(parent_idx) = find_task_by_id(&app.tasks, parent_id) {
+fn execute_add_subtask(app: &mut App, query: &str, content: &str) {
+    // Find the parent task using the same lookup mechanism as other commands
+    if let Some(parent_idx) = find_task(app, query) {
+        let parent_id = app.tasks[parent_idx].id;
+        
         // Create a new subtask
         let subtask = Task {
             id: app.next_id,
@@ -333,14 +333,14 @@ fn execute_add_subtask(app: &mut App, parent_id: u32, content: &str) {
 
         // Add the subtask to tasks list
         app.add_task(subtask);
-        app.log_activity(format!("Added subtask to task {parent_id}: {content}"));
+        app.log_activity(format!("Added subtask to task {}: {}", query, content));
 
         // Save updated task list
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
     } else {
-        app.log_activity(format!("No task found with ID {parent_id}"));
+        app.log_activity(format!("No task found matching '{}'", query));
     }
 }
 
@@ -357,8 +357,8 @@ pub fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::Focus(query)) => execute_focus_command(app, &query),
         Some(Command::Show(container)) => execute_show_command(app, container),
         Some(Command::Edit(task_id, content)) => execute_edit_command(app, task_id, content),
-        Some(Command::AddSubtask(parent_id, content)) => {
-            execute_add_subtask(app, parent_id, &content)
+        Some(Command::AddSubtask(query, content)) => {
+            execute_add_subtask(app, &query, &content)
         }
         None => {
             app.activity_log.add_message("Invalid command".to_string());
@@ -852,35 +852,35 @@ mod tests {
     #[test]
     fn test_add_subtask_success() {
         let mut app = setup_test_app();
-        let parent_id = 1; // From setup_test_app
+        let query = "Buy groceries";
         let content = "Subtask content";
 
-        execute_add_subtask(&mut app, parent_id, content);
+        execute_add_subtask(&mut app, query, content);
 
         // Verify subtask was created with correct parent reference
         let subtask = app.tasks.last().unwrap();
-        assert_eq!(subtask.parent_id, Some(parent_id));
+        assert!(app.tasks.iter().any(|t| t.content == query && t.child_ids.contains(&subtask.id)));
         assert_eq!(subtask.content, content);
 
         // Verify parent's child_ids was updated
-        let parent = app.tasks.iter().find(|t| t.id == parent_id).unwrap();
+        let parent = app.tasks.iter().find(|t| t.content == query).unwrap();
         assert!(parent.child_ids.contains(&subtask.id));
     }
 
     #[test]
     fn test_add_subtask_nonexistent_parent() {
         let mut app = setup_test_app();
-        let invalid_parent_id = 999;
+        let invalid_parent_query = "nonexistent task";
         let content = "Subtask content";
         let initial_task_count = app.tasks.len();
 
-        execute_add_subtask(&mut app, invalid_parent_id, content);
+        execute_add_subtask(&mut app, invalid_parent_query, content);
 
         // Verify no task was created
         assert_eq!(app.tasks.len(), initial_task_count);
         assert_eq!(
             app.activity_log.latest_message(),
-            Some(format!("No task found with ID {invalid_parent_id}").as_str())
+            Some(format!("No task found matching '{}'", invalid_parent_query).as_str())
         );
     }
 
@@ -893,7 +893,7 @@ mod tests {
         let parent_id = app.tasks.last().unwrap().id;
 
         // Create a child task
-        execute_add_subtask(&mut app, parent_id, "Child task");
+        execute_add_subtask(&mut app, "Parent task", "Child task");
 
         // Verify initial state
         let parent_index = app.tasks.iter().position(|t| t.id == parent_id).unwrap();

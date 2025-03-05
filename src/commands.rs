@@ -2,7 +2,7 @@
 //! keyboard input into task management operations.
 
 use chrono::Utc;
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use tui_input::backend::crossterm::EventHandler;
 
@@ -384,105 +384,139 @@ fn execute_command(app: &mut App, command: Option<Command>) {
     app.show_help = false;
 }
 
-fn is_ctrl_enter_pressed() -> bool {
-    let device_state = DeviceState::new();
-    let keys: Vec<Keycode> = device_state.get_keys();
-    keys.contains(&Keycode::LControl) && keys.contains(&Keycode::Enter)
-}
-
-/// Handle keyboard input events
-#[allow(clippy::needless_pass_by_value)] // Event is small and Copy
-#[allow(clippy::single_match)] // Match is clearer and we might add more event types
+/// New implementation of input event handling with cleaner structure
+/// using match statements for different stages of input processing
 pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
-        Event::Key(key_event) => match key_event.code {
-            KeyCode::Up => {
-                if let Some(current) = app.display_container_state.focused_index {
-                    // If at index 0, wrap to the last item
-                    let new_index = if current == 0 {
-                        app.display_container_state.display_to_id.len()
-                    } else {
-                        current - 1
-                    };
-                    app.display_container_state.focused_index = Some(new_index);
-                    app.display_container_state
-                        .update_input_for_focus(&app.tasks);
-                }
+        Event::Key(key_event) => {
+            // First check if we need to handle any special key combinations with device_query
+            if handle_device_query_keybindings(app, key_event) {
+                return;
             }
-            KeyCode::Down => {
-                if let Some(current) = app.display_container_state.focused_index {
-                    // If at last index, wrap to 0
-                    let new_index = if current >= app.display_container_state.display_to_id.len() {
-                        0
-                    } else {
-                        current + 1
-                    };
-                    app.display_container_state.focused_index = Some(new_index);
-                    app.display_container_state
-                        .update_input_for_focus(&app.tasks);
-                }
-            }
-            KeyCode::Esc => app.display_container_state.clear_focus(),
-            _ => {
-                // Handle input field updates
-                app.display_container_state
-                    .get_input_mut()
-                    .handle_event(&event);
 
-                // Check for Enter to submit
-                if key_event.code == KeyCode::Enter {
-                    let input = app.display_container_state.input_value().to_string();
-                    if !input.is_empty() {
-                        let commands = if is_ctrl_enter_pressed()
-                            && app.display_container_state.focused_index.is_some()
+            // Then handle regular key events with match statements
+            match key_event.code {
+                // Navigation keys
+                KeyCode::Up | KeyCode::Down | KeyCode::Esc => {
+                    handle_navigation_keys(app, key_event.code);
+                }
+                
+                // Enter key (without modifiers from device_query)
+                KeyCode::Enter => {
+                    // First update the input field
+                    app.display_container_state
+                        .get_input_mut()
+                        .handle_event(&event);
+                    
+                    // Then process the command
+                    handle_enter_command(app);
+                }
+                
+                // All other keys - pass to the input field handler
+                _ => {
+                    app.display_container_state
+                        .get_input_mut()
+                        .handle_event(&event);
+                }
+            }
+        }
+        _ => {} // Ignore non-keyboard events
+    }
+}
+
+/// Handle special key combinations using device_query
+/// Returns true if a key combination was handled
+fn handle_device_query_keybindings(app: &mut App, key_event: KeyEvent) -> bool {
+    // Check for Ctrl+Enter
+    if key_event.code == KeyCode::Enter {
+        let device_state = DeviceState::new();
+        let keys: Vec<Keycode> = device_state.get_keys();
+        
+        if keys.contains(&Keycode::LControl) || keys.contains(&Keycode::RControl) {
+            let input = app.display_container_state.input_value().to_string();
+            if !input.is_empty() && app.display_container_state.focused_index.is_some() {
+                match app.display_container_state.focused_index {
+                    Some(0) | None => {
+                        execute_command(app, Some(Command::Complete(input)));
+                    }
+                    Some(idx) => {
+                        if let Some(task_id) = app.display_container_state
+                            .display_to_id
+                            .get(idx - 1)
+                            .copied() 
                         {
-                            match app.display_container_state.focused_index {
-                                Some(0) | None => vec![Command::Complete(input)],
-                                Some(idx) => app
-                                    .display_container_state
-                                    .display_to_id
-                                    .get(idx - 1)
-                                    .copied()
-                                    .map_or_else(Vec::new, |task_id| {
-                                        vec![
-                                            Command::Edit(task_id, input),
-                                            Command::CompleteById(task_id),
-                                        ]
-                                    }),
-                            }
-                        } else {
-                            match app.display_container_state.focused_index {
-                                Some(0) | None => vec![parse_command(input)],
-                                Some(idx) => app
-                                    .display_container_state
-                                    .display_to_id
-                                    .get(idx - 1)
-                                    .copied()
-                                    .map_or_else(Vec::new, |task_id| {
-                                        vec![Command::Edit(task_id, input)]
-                                    }),
-                            }
-                        };
-
-                        for cmd in commands {
-                            match cmd {
-                                Command::Edit(_, _) => {
-                                    // For edits, keep the input buffer and focus
-                                    execute_command(app, Some(cmd));
-                                }
-                                _ => {
-                                    // For other commands, execute
-                                    execute_command(app, Some(cmd));
-                                }
-                            }
+                            execute_command(app, Some(Command::Edit(task_id, input.clone())));
+                            execute_command(app, Some(Command::CompleteById(task_id)));
                         }
                     }
                 }
+                return true;
             }
-        },
-        _ => {}
+        }
+    }
+    
+    false
+}
+
+/// Handle basic navigation keys
+fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
+    match key_code {
+        KeyCode::Up => {
+            if let Some(current) = app.display_container_state.focused_index {
+                // If at index 0, wrap to the last item
+                let new_index = if current == 0 {
+                    app.display_container_state.display_to_id.len()
+                } else {
+                    current - 1
+                };
+                app.display_container_state.focused_index = Some(new_index);
+                app.display_container_state.update_input_for_focus(&app.tasks);
+            }
+        }
+        KeyCode::Down => {
+            if let Some(current) = app.display_container_state.focused_index {
+                // If at last index, wrap to 0
+                let new_index = if current >= app.display_container_state.display_to_id.len() {
+                    0
+                } else {
+                    current + 1
+                };
+                app.display_container_state.focused_index = Some(new_index);
+                app.display_container_state.update_input_for_focus(&app.tasks);
+            }
+        }
+        KeyCode::Esc => app.display_container_state.clear_focus(),
+        _ => {} // Should never happen due to the caller's match statement
     }
 }
+
+/// Handle regular Enter key command processing
+fn handle_enter_command(app: &mut App) {
+    let input = app.display_container_state.input_value().to_string();
+    if input.is_empty() {
+        return;
+    }
+
+    let commands = match app.display_container_state.focused_index {
+        Some(0) | None => vec![parse_command(input)],
+        Some(idx) => {
+            if let Some(task_id) = app.display_container_state
+                .display_to_id
+                .get(idx - 1)
+                .copied() 
+            {
+                vec![Command::Edit(task_id, input)]
+            } else {
+                vec![]
+            }
+        }
+    };
+
+    for cmd in commands {
+        execute_command(app, Some(cmd));
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

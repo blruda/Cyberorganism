@@ -482,7 +482,13 @@ fn format_task_line<'a>(
 
     // Add task index
     spans.push(Span::raw(format!("{indent}{task_index}")));
-    spans.push(Span::raw(". "));
+    
+    // Only add period after index for top-level tasks
+    if depth == 0 {
+        spans.push(Span::raw(". "));
+    } else {
+        spans.push(Span::raw(" "));
+    }
 
     // Add completion status indicator
     if task.status == TaskStatus::Done {

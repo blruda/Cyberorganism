@@ -13,7 +13,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::Terminal;
 use std::io;
 use std::time::Duration;
-use taskstore::{load_tasks, Task};
+use taskstore::{Task, load_tasks};
 
 /// Represents the current state of the application
 pub struct App {
@@ -123,10 +123,10 @@ fn run_app<B: ratatui::backend::Backend>(
 ) -> io::Result<()> {
     // Initialize the key combination tracker with a moderate debounce
     let mut key_tracker = keyhandler::KeyCombinationTracker::new(100);
-    
+
     // Use a moderate polling timeout to balance responsiveness and stability
     let polling_timeout = Duration::from_millis(33); // ~30 fps
-    
+
     loop {
         // Draw the UI
         terminal.draw(|f| ui::draw(f, &app))?;

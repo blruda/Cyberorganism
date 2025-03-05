@@ -5,8 +5,8 @@
 //! representation, serialization, and file-based storage operations.
 
 use chrono::{DateTime, Utc};
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;

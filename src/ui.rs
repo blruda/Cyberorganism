@@ -9,7 +9,7 @@
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
     prelude::*,
@@ -23,8 +23,8 @@ use tui_input::Input;
 const ACCENT_COLOR: Color = Color::Rgb(57, 255, 20);
 
 use crate::{
-    taskstore::{Task, TaskContainer, TaskStatus},
     App,
+    taskstore::{Task, TaskContainer, TaskStatus},
 };
 
 /// Initializes the terminal for TUI operation.
@@ -458,7 +458,7 @@ fn format_task_line<'a>(
 
     // Add task index
     spans.push(Span::raw(format!("{indent}{task_index}")));
-    
+
     // Only add period after index for top-level tasks
     if depth == 0 {
         spans.push(Span::raw(". "));

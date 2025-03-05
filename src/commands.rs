@@ -5,9 +5,11 @@ use chrono::Utc;
 use crossterm::event::{Event, KeyCode};
 use tui_input::backend::crossterm::EventHandler;
 
-use crate::debug::log_debug;
-use crate::taskstore::{find_task_by_content, find_task_by_id, save_tasks, Task, TaskContainer, TaskStatus};
 use crate::App;
+use crate::debug::log_debug;
+use crate::taskstore::{
+    Task, TaskContainer, TaskStatus, find_task_by_content, find_task_by_id, save_tasks,
+};
 
 /// Commands that can be executed by the user
 pub enum Command {
@@ -18,11 +20,11 @@ pub enum Command {
     MoveToTaskpad(String),
     MoveToBackburner(String),
     MoveToShelved(String),
-    Edit(u32, String),       // (task_id, new_content)
-    Focus(String),           // Focus on a task by index or content
-    Show(TaskContainer),     // Switch active container
+    Edit(u32, String),          // (task_id, new_content)
+    Focus(String),              // Focus on a task by index or content
+    Show(TaskContainer),        // Switch active container
     AddSubtask(String, String), // (parent_query, subtask_content)
-    Toggle(String),          // Toggle expansion state of a task
+    Toggle(String),             // Toggle expansion state of a task
 }
 
 /// Parses the input string into a Command
@@ -318,7 +320,7 @@ fn execute_add_subtask(app: &mut App, query: &str, content: &str) {
     // Find the parent task using the same lookup mechanism as other commands
     if let Some(parent_idx) = find_task(app, query) {
         let parent_id = app.tasks[parent_idx].id;
-        
+
         // Create a new subtask
         let subtask = Task {
             id: app.next_id,
@@ -336,14 +338,14 @@ fn execute_add_subtask(app: &mut App, query: &str, content: &str) {
 
         // Add the subtask to tasks list
         app.add_task(subtask);
-        app.log_activity(format!("Added subtask to task {}: {}", query, content));
+        app.log_activity(format!("Added subtask to task {query}: {content}"));
 
         // Save updated task list
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
     } else {
-        app.log_activity(format!("No task found matching '{}'", query));
+        app.log_activity(format!("No task found matching '{query}'"));
     }
 }
 
@@ -372,13 +374,13 @@ pub fn execute_command(app: &mut App, command: Option<Command>) {
         Some(Command::Show(container)) => execute_show_command(app, container),
         Some(Command::Edit(task_id, content)) => execute_edit_command(app, task_id, content),
         Some(Command::AddSubtask(query, content)) => {
-            execute_add_subtask(app, &query, &content)
+            execute_add_subtask(app, &query, &content);
         }
         Some(Command::Toggle(query)) => execute_toggle_command(app, &query),
         None => {
             app.activity_log.add_message("Invalid command".to_string());
         }
-    }
+    };
 
     // Update display after any command
     app.display_container_state.update_display_order(&app.tasks);
@@ -387,6 +389,7 @@ pub fn execute_command(app: &mut App, command: Option<Command>) {
 
 /// New implementation of input event handling with cleaner structure
 /// using match statements for different stages of input processing
+#[allow(clippy::needless_pass_by_value)]
 pub fn handle_input_event(app: &mut App, event: Event) {
     match event {
         Event::Key(key_event) => {
@@ -396,18 +399,18 @@ pub fn handle_input_event(app: &mut App, event: Event) {
                 KeyCode::Up | KeyCode::Down | KeyCode::Esc => {
                     handle_navigation_keys(app, key_event.code);
                 }
-                
+
                 // Enter key (without modifiers from device_query)
                 KeyCode::Enter => {
                     // First update the input field
                     app.display_container_state
                         .get_input_mut()
                         .handle_event(&event);
-                    
+
                     // Then process the command
                     handle_enter_command(app);
                 }
-                
+
                 // All other keys - pass to the input field handler
                 _ => {
                     app.display_container_state
@@ -432,7 +435,8 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
                     current - 1
                 };
                 app.display_container_state.focused_index = Some(new_index);
-                app.display_container_state.update_input_for_focus(&app.tasks);
+                app.display_container_state
+                    .update_input_for_focus(&app.tasks);
             }
         }
         KeyCode::Down => {
@@ -444,7 +448,8 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
                     current + 1
                 };
                 app.display_container_state.focused_index = Some(new_index);
-                app.display_container_state.update_input_for_focus(&app.tasks);
+                app.display_container_state
+                    .update_input_for_focus(&app.tasks);
             }
         }
         KeyCode::Esc => app.display_container_state.clear_focus(),
@@ -453,6 +458,7 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
 }
 
 /// Handle regular Enter key command processing
+#[allow(clippy::option_if_let_else)]
 fn handle_enter_command(app: &mut App) {
     let input = app.display_container_state.input_value().to_string();
     if input.is_empty() {
@@ -462,10 +468,11 @@ fn handle_enter_command(app: &mut App) {
     let commands = match app.display_container_state.focused_index {
         Some(0) | None => vec![parse_command(input)],
         Some(idx) => {
-            if let Some(task_id) = app.display_container_state
+            if let Some(task_id) = app
+                .display_container_state
                 .display_to_id
                 .get(idx - 1)
-                .copied() 
+                .copied()
             {
                 vec![Command::Edit(task_id, input)]
             } else {
@@ -478,7 +485,6 @@ fn handle_enter_command(app: &mut App) {
         execute_command(app, Some(cmd));
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -883,7 +889,11 @@ mod tests {
 
         // Verify subtask was created with correct parent reference
         let subtask = app.tasks.last().unwrap();
-        assert!(app.tasks.iter().any(|t| t.content == query && t.child_ids.contains(&subtask.id)));
+        assert!(
+            app.tasks
+                .iter()
+                .any(|t| t.content == query && t.child_ids.contains(&subtask.id))
+        );
         assert_eq!(subtask.content, content);
 
         // Verify parent's child_ids was updated
@@ -954,38 +964,38 @@ mod tests {
     fn test_toggle_task_expansion() {
         let mut app = setup_test_app();
         let query = "Buy groceries";
-        
+
         // Initially, the task should not be in the folded_tasks set
         let task_index = find_task(&app, query).unwrap();
         let task_id = app.tasks[task_index].id;
         assert!(!app.display_container_state.folded_tasks.contains(&task_id));
-        
+
         // Toggle the task expansion
         execute_toggle_command(&mut app, query);
-        
+
         // Now the task should be in the folded_tasks set
         assert!(app.display_container_state.folded_tasks.contains(&task_id));
-        
+
         // Toggle again
         execute_toggle_command(&mut app, query);
-        
+
         // Now the task should not be in the folded_tasks set
         assert!(!app.display_container_state.folded_tasks.contains(&task_id));
-        
+
         // Verify activity log message
         assert_eq!(
             app.activity_log.latest_message(),
-            Some(format!("Toggled expansion state for task: {}", query).as_str())
+            Some(format!("Toggled task: {}", query).as_str())
         );
     }
-    
+
     #[test]
     fn test_toggle_nonexistent_task() {
         let mut app = setup_test_app();
         let invalid_query = "nonexistent task";
-        
+
         execute_toggle_command(&mut app, invalid_query);
-        
+
         // Verify activity log message
         assert_eq!(
             app.activity_log.latest_message(),

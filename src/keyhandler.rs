@@ -13,7 +13,7 @@ use tui_input::backend::crossterm::EventHandler;
 
 use crate::App;
 use crate::debug::log_debug;
-use crate::commands::{Command, execute_command, parse_command};
+use crate::commands::{Command, execute_command, parse_command, execute_add_subtask};
 
 /// Represents a key combination detected by `device_query`
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +24,8 @@ pub enum KeyCombination {
     CtrlDown,
     /// Ctrl+Enter key combination
     CtrlEnter,
+    /// Shift+Enter key combination
+    ShiftEnter,
     /// No special combination detected
     None,
 }
@@ -68,12 +70,14 @@ impl KeyCombinationTracker {
             log_debug(&format!("Detected keys: {keys:?}"));
         }
 
-        // Check for Ctrl key
+        // Check for modifier keys
         let is_ctrl_pressed =
             keys.contains(&Keycode::LControl) || keys.contains(&Keycode::RControl);
+        let is_shift_pressed =
+            keys.contains(&Keycode::LShift) || keys.contains(&Keycode::RShift);
 
-        // If Ctrl is not pressed, reset state and return None
-        if !is_ctrl_pressed {
+        // If no modifiers are pressed, reset state and return None
+        if !is_ctrl_pressed && !is_shift_pressed {
             // Only reset if we previously had a combination
             if self.last_combination != KeyCombination::None {
                 self.last_combination = KeyCombination::None;
@@ -82,12 +86,14 @@ impl KeyCombinationTracker {
         }
 
         // Determine the current combination
-        let current_combination = if keys.contains(&Keycode::Up) {
+        let current_combination = if is_ctrl_pressed && keys.contains(&Keycode::Up) {
             KeyCombination::CtrlUp
-        } else if keys.contains(&Keycode::Down) {
+        } else if is_ctrl_pressed && keys.contains(&Keycode::Down) {
             KeyCombination::CtrlDown
-        } else if keys.contains(&Keycode::Enter) {
+        } else if is_ctrl_pressed && keys.contains(&Keycode::Enter) {
             KeyCombination::CtrlEnter
+        } else if is_shift_pressed && keys.contains(&Keycode::Enter) {
+            KeyCombination::ShiftEnter
         } else {
             KeyCombination::None
         };
@@ -140,6 +146,45 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                     {
                         log_debug(&format!("Toggling expansion for task ID: {task_id}"));
                         app.display_container_state.toggle_task_expansion(task_id);
+                        return true;
+                    }
+                }
+            }
+        }
+        KeyCombination::ShiftEnter => {
+            log_debug("Handling Shift+Enter for subtask creation");
+            
+            // Only handle if we're focused on a task (not the input line)
+            if let Some(idx) = app.display_container_state.focused_index {
+                if idx > 0 { // Skip index 0 which is the input line
+                    // Get the task ID of the focused task
+                    if let Some(parent_task_id) = app
+                        .display_container_state
+                        .display_to_id
+                        .get(idx - 1)
+                        .copied()
+                    {
+                        // Store the original focus for returning later
+                        app.display_container_state.original_focus = Some(idx);
+                        
+                        // Create an empty subtask using the parent task ID directly
+                        let subtask_id = execute_add_subtask(app, &parent_task_id.to_string(), "");
+                        
+                        // Make sure the parent task is expanded
+                        app.display_container_state.folded_tasks.remove(&parent_task_id);
+                        
+                        // Refresh the display to show the new subtask
+                        app.display_container_state.update_display_order(&app.tasks);
+                        
+                        // Find the newly created subtask and focus on it
+                        if let Some(new_subtask_id) = subtask_id {
+                            if let Some(subtask_display_idx) = app.display_container_state.get_display_index(new_subtask_id) {
+                                // Set focus to the new subtask and update input appropriately
+                                app.display_container_state.focused_index = Some(subtask_display_idx);
+                                app.display_container_state.update_input_for_focus(&app.tasks);
+                            }
+                        }
+                        
                         return true;
                     }
                 }
@@ -281,5 +326,18 @@ fn handle_enter_command(app: &mut App) {
 
     for cmd in commands {
         execute_command(app, Some(cmd));
+    }
+    
+    // Check if we need to restore focus to the original task
+    // This happens after editing a subtask created with Shift+Enter
+    if let Some(original_idx) = app.display_container_state.original_focus {
+        // Restore the original focus
+        app.display_container_state.focused_index = Some(original_idx);
+        // Update the input field to show the original task's content
+        app.display_container_state.update_input_for_focus(&app.tasks);
+        // Clear the original focus now that we've restored it
+        app.display_container_state.original_focus = None;
+        
+        log_debug("Restored focus to parent task after subtask creation");
     }
 }

@@ -71,6 +71,9 @@ pub struct DisplayContainerState {
     pub display_to_id: Vec<u32>,
     /// Currently focused task index (0-based)
     pub focused_index: Option<usize>,
+    /// Stores the original task focus index when creating a subtask
+    /// Used to return focus after subtask creation
+    pub original_focus: Option<usize>,
     /// Input field for entering commands
     input: Input,
     /// Currently active container being displayed
@@ -90,6 +93,7 @@ impl DisplayContainerState {
         Self {
             display_to_id: Vec::new(),
             focused_index: Some(0), // Start focused on "Create new task"
+            original_focus: None,
             input: Input::default(),
             active_container: crate::taskstore::TaskContainer::Taskpad,
             folded_tasks: std::collections::HashSet::new(),

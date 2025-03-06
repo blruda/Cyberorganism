@@ -314,10 +314,24 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
 }
 
 /// Execute add subtask command
-fn execute_add_subtask(app: &mut App, query: &str, content: &str) {
-    // Find the parent task using the same lookup mechanism as other commands
-    if let Some(parent_idx) = find_task(app, query) {
+/// 
+/// Can be called with either:
+/// - A query string to find the parent task
+/// - A direct parent task ID
+pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> Option<u32> {
+    // Check if query_or_id is a task ID (u32)
+    let parent_idx = if let Ok(parent_id) = query_or_id.parse::<u32>() {
+        // If it's a valid u32, find the task by ID
+        find_task_by_id(&app.tasks, parent_id)
+    } else {
+        // Otherwise use the regular find_task function
+        find_task(app, query_or_id)
+    };
+    
+    // Create the subtask if parent was found
+    if let Some(parent_idx) = parent_idx {
         let parent_id = app.tasks[parent_idx].id;
+        let parent_content = app.tasks[parent_idx].content.clone();
 
         // Create a new subtask
         let subtask = Task {
@@ -329,21 +343,30 @@ fn execute_add_subtask(app: &mut App, query: &str, content: &str) {
             parent_id: Some(parent_id),
             child_ids: Vec::new(),
         };
+        let subtask_id = subtask.id;
         app.next_id += 1;
 
         // Add subtask ID to parent's child_ids
-        app.tasks[parent_idx].add_subtask(subtask.id);
+        app.tasks[parent_idx].add_subtask(subtask_id);
 
         // Add the subtask to tasks list
         app.add_task(subtask);
-        app.log_activity(format!("Added subtask to task {query}: {content}"));
+        let msg = if content.is_empty() {
+            format!("Added subtask to task '{parent_content}'")
+        } else {
+            format!("Added subtask to task '{parent_content}': {content}")
+        };
+        app.log_activity(msg);
 
         // Save updated task list
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
+        
+        Some(subtask_id)
     } else {
-        app.log_activity(format!("No task found matching '{query}'"));
+        app.log_activity(format!("No task found matching '{query_or_id}'"));
+        None
     }
 }
 

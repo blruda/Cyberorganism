@@ -316,12 +316,11 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
 }
 
 /// Execute add subtask command
-/// 
+///
 /// Can be called with either:
 /// - A query string to find the parent task
 /// - A direct parent task ID
 pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> Option<u32> {
-
     // Check if query_or_id is a task ID (u32)
     let parent_idx = if let Ok(parent_id) = query_or_id.parse::<u32>() {
         // If it's a valid u32, find the task by ID
@@ -330,7 +329,7 @@ pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> O
         // Otherwise use the regular find_task function
         find_task(app, query_or_id)
     };
-    
+
     // Create the subtask if parent was found
     if let Some(parent_idx) = parent_idx {
         let parent_id = app.tasks[parent_idx].id;
@@ -365,11 +364,9 @@ pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> O
         if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
             log_debug(&format!("Failed to save tasks: {e}"));
         }
-        
 
         Some(subtask_id)
     } else {
-
         app.log_activity(format!("No task found matching '{query_or_id}'"));
         None
     }
@@ -393,47 +390,47 @@ pub fn execute_command(app: &mut App, command: Option<Command>) -> Option<u32> {
         Some(Command::Complete(query)) => {
             execute_complete_command(app, &query);
             None
-        },
+        }
         Some(Command::CompleteById(id)) => {
             execute_complete_by_id_command(app, id);
             None
-        },
+        }
         Some(Command::Delete(query)) => {
             execute_delete_command(app, &query);
             None
-        },
+        }
         Some(Command::MoveToTaskpad(query)) => {
             execute_move_to_taskpad_command(app, &query);
             None
-        },
+        }
         Some(Command::MoveToBackburner(query)) => {
             execute_move_to_backburner_command(app, &query);
             None
-        },
+        }
         Some(Command::MoveToShelved(query)) => {
             execute_move_to_shelved_command(app, &query);
             None
-        },
+        }
         Some(Command::Focus(query)) => {
             execute_focus_command(app, &query);
             None
-        },
+        }
         Some(Command::Show(container)) => {
             execute_show_command(app, container);
             None
-        },
+        }
         Some(Command::Edit(task_id, content)) => {
             execute_edit_command(app, task_id, content);
             None
-        },
+        }
         Some(Command::AddSubtask(query, content)) => {
             execute_add_subtask(app, &query, &content);
             None
-        },
+        }
         Some(Command::Toggle(query)) => {
             execute_toggle_command(app, &query);
             None
-        },
+        }
         None => {
             app.activity_log.add_message("Invalid command".to_string());
             None
@@ -443,15 +440,9 @@ pub fn execute_command(app: &mut App, command: Option<Command>) -> Option<u32> {
     // Update display after any command
     app.display_container_state.update_display_order(&app.tasks);
     app.show_help = false;
-    
+
     result
 }
-
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {

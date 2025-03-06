@@ -1,14 +1,19 @@
-//! Special key combination handling using `device_query`
+//! Input handling for cyberorganism
 //!
-//! This module provides a separate polling mechanism for detecting
-//! key combinations that crossterm may not reliably detect.
+//! This module provides input handling functionality, including:
+//! - Regular keyboard event handling via crossterm
+//! - Special key combination detection via device_query
 
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::HashSet;
 use std::time::Instant;
 
+use crossterm::event::{Event, KeyCode};
+use tui_input::backend::crossterm::EventHandler;
+
 use crate::App;
 use crate::debug::log_debug;
+use crate::commands::{Command, execute_command, parse_command};
 
 /// Represents a key combination detected by `device_query`
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,9 +152,9 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                 match app.display_container_state.focused_index {
                     Some(0) | None => {
                         // Complete the task from input
-                        crate::commands::execute_command(
+                        execute_command(
                             app,
-                            Some(crate::commands::Command::Complete(input)),
+                            Some(Command::Complete(input)),
                         );
                     }
                     Some(idx) => {
@@ -160,13 +165,13 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                             .copied()
                         {
                             // Edit and complete the focused task
-                            crate::commands::execute_command(
+                            execute_command(
                                 app,
-                                Some(crate::commands::Command::Edit(task_id, input)),
+                                Some(Command::Edit(task_id, input)),
                             );
-                            crate::commands::execute_command(
+                            execute_command(
                                 app,
-                                Some(crate::commands::Command::CompleteById(task_id)),
+                                Some(Command::CompleteById(task_id)),
                             );
                         }
                     }
@@ -178,4 +183,103 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
     }
 
     false
+}
+
+/// New implementation of input event handling with cleaner structure
+/// using match statements for different stages of input processing
+#[allow(clippy::needless_pass_by_value)]
+pub fn handle_input_event(app: &mut App, event: Event) {
+    match event {
+        Event::Key(key_event) => {
+            // Handle regular key events with match statements
+            match key_event.code {
+                // Navigation keys
+                KeyCode::Up | KeyCode::Down | KeyCode::Esc => {
+                    handle_navigation_keys(app, key_event.code);
+                }
+
+                // Enter key (without modifiers from device_query)
+                KeyCode::Enter => {
+                    // First update the input field
+                    app.display_container_state
+                        .get_input_mut()
+                        .handle_event(&event);
+
+                    // Then process the command
+                    handle_enter_command(app);
+                }
+
+                // All other keys - pass to the input field handler
+                _ => {
+                    app.display_container_state
+                        .get_input_mut()
+                        .handle_event(&event);
+                }
+            }
+        }
+        _ => {} // Ignore non-keyboard events
+    }
+}
+
+/// Handle basic navigation keys
+fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
+    match key_code {
+        KeyCode::Up => {
+            if let Some(current) = app.display_container_state.focused_index {
+                // If at index 0, wrap to the last item
+                let new_index = if current == 0 {
+                    app.display_container_state.display_to_id.len()
+                } else {
+                    current - 1
+                };
+                app.display_container_state.focused_index = Some(new_index);
+                app.display_container_state
+                    .update_input_for_focus(&app.tasks);
+            }
+        }
+        KeyCode::Down => {
+            if let Some(current) = app.display_container_state.focused_index {
+                // If at last index, wrap to 0
+                let new_index = if current >= app.display_container_state.display_to_id.len() {
+                    0
+                } else {
+                    current + 1
+                };
+                app.display_container_state.focused_index = Some(new_index);
+                app.display_container_state
+                    .update_input_for_focus(&app.tasks);
+            }
+        }
+        KeyCode::Esc => app.display_container_state.clear_focus(),
+        _ => {} // Should never happen due to the caller's match statement
+    }
+}
+
+/// Handle regular Enter key command processing
+#[allow(clippy::option_if_let_else)]
+fn handle_enter_command(app: &mut App) {
+    let input = app.display_container_state.input_value().to_string();
+    if input.is_empty() {
+        return;
+    }
+
+    let commands = match app.display_container_state.focused_index {
+        Some(0) | None => vec![parse_command(input)],
+        Some(idx) => {
+            if let Some(task_id) = app
+                .display_container_state
+                .display_to_id
+                .get(idx - 1)
+                .copied()
+            {
+                vec![Command::Edit(task_id, input)]
+            } else {
+                vec![]
+            }
+        }
+    };
+
+    for cmd in commands {
+        execute_command(app, Some(cmd));
+    }
 }

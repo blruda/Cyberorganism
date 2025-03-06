@@ -147,7 +147,7 @@ fn run_app<B: ratatui::backend::Backend>(
                 {
                     return Ok(());
                 }
-                keyhandler::handle_input_event(&mut app, event);
+                keyhandler::handle_input_event(&mut app, event, &key_tracker);
             }
         }
     }

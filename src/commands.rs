@@ -139,14 +139,16 @@ fn complete_task(app: &mut App, query: &str, task_id: Option<u32>) -> CommandRes
 }
 
 /// Execute a create command
-fn execute_create_command(app: &mut App, content: &str) {
+pub fn execute_create_command(app: &mut App, content: &str) -> u32 {
     let task = Task::new(app.next_id, content.to_string());
+    let task_id = task.id;
     app.next_id += 1;
     app.add_task(task);
     app.log_activity("Task added".to_string());
     if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
         log_debug(&format!("Failed to save tasks: {e}"));
     }
+    task_id
 }
 
 /// Execute a complete command
@@ -319,6 +321,7 @@ fn execute_edit_command(app: &mut App, task_id: u32, content: String) {
 /// - A query string to find the parent task
 /// - A direct parent task ID
 pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> Option<u32> {
+
     // Check if query_or_id is a task ID (u32)
     let parent_idx = if let Ok(parent_id) = query_or_id.parse::<u32>() {
         // If it's a valid u32, find the task by ID
@@ -363,8 +366,10 @@ pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> O
             log_debug(&format!("Failed to save tasks: {e}"));
         }
         
+
         Some(subtask_id)
     } else {
+
         app.log_activity(format!("No task found matching '{query_or_id}'"));
         None
     }
@@ -382,30 +387,64 @@ fn execute_toggle_command(app: &mut App, query: &str) {
 }
 
 /// Executes a command, updating the app state as needed
-pub fn execute_command(app: &mut App, command: Option<Command>) {
-    match command {
-        Some(Command::Create(content)) => execute_create_command(app, &content),
-        Some(Command::Complete(query)) => execute_complete_command(app, &query),
-        Some(Command::CompleteById(id)) => execute_complete_by_id_command(app, id),
-        Some(Command::Delete(query)) => execute_delete_command(app, &query),
-        Some(Command::MoveToTaskpad(query)) => execute_move_to_taskpad_command(app, &query),
-        Some(Command::MoveToBackburner(query)) => execute_move_to_backburner_command(app, &query),
-        Some(Command::MoveToShelved(query)) => execute_move_to_shelved_command(app, &query),
-        Some(Command::Focus(query)) => execute_focus_command(app, &query),
-        Some(Command::Show(container)) => execute_show_command(app, container),
-        Some(Command::Edit(task_id, content)) => execute_edit_command(app, task_id, content),
+pub fn execute_command(app: &mut App, command: Option<Command>) -> Option<u32> {
+    let result = match command {
+        Some(Command::Create(content)) => Some(execute_create_command(app, &content)),
+        Some(Command::Complete(query)) => {
+            execute_complete_command(app, &query);
+            None
+        },
+        Some(Command::CompleteById(id)) => {
+            execute_complete_by_id_command(app, id);
+            None
+        },
+        Some(Command::Delete(query)) => {
+            execute_delete_command(app, &query);
+            None
+        },
+        Some(Command::MoveToTaskpad(query)) => {
+            execute_move_to_taskpad_command(app, &query);
+            None
+        },
+        Some(Command::MoveToBackburner(query)) => {
+            execute_move_to_backburner_command(app, &query);
+            None
+        },
+        Some(Command::MoveToShelved(query)) => {
+            execute_move_to_shelved_command(app, &query);
+            None
+        },
+        Some(Command::Focus(query)) => {
+            execute_focus_command(app, &query);
+            None
+        },
+        Some(Command::Show(container)) => {
+            execute_show_command(app, container);
+            None
+        },
+        Some(Command::Edit(task_id, content)) => {
+            execute_edit_command(app, task_id, content);
+            None
+        },
         Some(Command::AddSubtask(query, content)) => {
             execute_add_subtask(app, &query, &content);
-        }
-        Some(Command::Toggle(query)) => execute_toggle_command(app, &query),
+            None
+        },
+        Some(Command::Toggle(query)) => {
+            execute_toggle_command(app, &query);
+            None
+        },
         None => {
             app.activity_log.add_message("Invalid command".to_string());
+            None
         }
     };
 
     // Update display after any command
     app.display_container_state.update_display_order(&app.tasks);
     app.show_help = false;
+    
+    result
 }
 
 

@@ -13,7 +13,7 @@ use tui_input::backend::crossterm::EventHandler;
 
 use crate::App;
 use crate::debug::log_debug;
-use crate::commands::{Command, execute_command, parse_command, execute_add_subtask};
+use crate::commands::{Command, execute_command, parse_command, execute_add_subtask, execute_create_command};
 
 /// Represents a key combination detected by `device_query`
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +36,8 @@ pub struct KeyCombinationTracker {
     last_check: Instant,
     debounce_ms: u64,
     last_combination: KeyCombination,
+    /// Tracks whether the Shift key is currently pressed
+    pub shift_pressed: bool,
 }
 
 impl KeyCombinationTracker {
@@ -46,6 +48,7 @@ impl KeyCombinationTracker {
             last_check: Instant::now(),
             debounce_ms,
             last_combination: KeyCombination::None,
+            shift_pressed: false,
         }
     }
 
@@ -64,6 +67,9 @@ impl KeyCombinationTracker {
 
         // Get the current key state
         let keys: HashSet<Keycode> = self.device_state.get_keys().into_iter().collect();
+
+        // Update shift_pressed state
+        self.shift_pressed = keys.contains(&Keycode::LShift) || keys.contains(&Keycode::RShift);
 
         // Debug log all detected keys when keys are pressed
         if !keys.is_empty() {
@@ -124,7 +130,8 @@ impl KeyCombinationTracker {
 
 /// Handles a detected key combination and applies it to the app state
 pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> bool {
-    match combination {
+
+    let _result = match combination {
         KeyCombination::CtrlUp | KeyCombination::CtrlDown => {
             log_debug(&format!(
                 "Handling Ctrl+{:?}",
@@ -146,6 +153,7 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                     {
                         log_debug(&format!("Toggling expansion for task ID: {task_id}"));
                         app.display_container_state.toggle_task_expansion(task_id);
+
                         return true;
                     }
                 }
@@ -154,9 +162,50 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
         KeyCombination::ShiftEnter => {
             log_debug("Handling Shift+Enter for subtask creation");
             
-            // Only handle if we're focused on a task (not the input line)
-            if let Some(idx) = app.display_container_state.focused_index {
-                if idx > 0 { // Skip index 0 which is the input line
+            match app.display_container_state.focused_index {
+                // Handle Shift+Enter on the "Create new task" input line
+                Some(0) | None => {
+                    let input = app.display_container_state.input_value().to_string();
+                    if !input.is_empty() {
+                        // Create a new task directly (bypass parse_command)
+                        let new_task_id = execute_create_command(app, &input);
+                        
+                        // Use the returned task ID for the next steps
+                        
+                        // Refresh the display to show the new task
+                        app.display_container_state.update_display_order(&app.tasks);
+                        
+                        // Find the display index for the new task
+                        if let Some(task_display_idx) = app.display_container_state.get_display_index(new_task_id) {
+                            // Store the original focus (the newly created task) for returning later
+                            app.display_container_state.original_focus = Some(task_display_idx);
+                            
+                            // Create an empty subtask for the newly created task
+                            let subtask_id = execute_add_subtask(app, &new_task_id.to_string(), "");
+                            
+                            // Make sure the parent task is expanded
+                            app.display_container_state.folded_tasks.remove(&new_task_id);
+                            
+                            // Refresh the display again to show the new subtask
+                            app.display_container_state.update_display_order(&app.tasks);
+                            
+                            // Find the newly created subtask and focus on it
+                            if let Some(new_subtask_id) = subtask_id {
+                                if let Some(subtask_display_idx) = app.display_container_state.get_display_index(new_subtask_id) {
+                                    // Set focus to the new subtask and update input appropriately
+                                    app.display_container_state.focused_index = Some(subtask_display_idx);
+                                    app.display_container_state.update_input_for_focus(&app.tasks);
+                                }
+                            }
+                            
+    
+                        return true;
+                        }
+                    }
+                },
+                
+                // Handle Shift+Enter on an existing task
+                Some(idx) => {
                     // Get the task ID of the focused task
                     if let Some(parent_task_id) = app
                         .display_container_state
@@ -185,6 +234,7 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                             }
                         }
                         
+
                         return true;
                     }
                 }
@@ -197,7 +247,7 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                 match app.display_container_state.focused_index {
                     Some(0) | None => {
                         // Complete the task from input
-                        execute_command(
+                        let _ = execute_command(
                             app,
                             Some(Command::Complete(input)),
                         );
@@ -210,22 +260,23 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
                             .copied()
                         {
                             // Edit and complete the focused task
-                            execute_command(
+                            let _ = execute_command(
                                 app,
                                 Some(Command::Edit(task_id, input)),
                             );
-                            execute_command(
+                            let _ = execute_command(
                                 app,
                                 Some(Command::CompleteById(task_id)),
                             );
                         }
                     }
                 }
+                log_debug("ShiftEnter handling completed successfully");
                 return true;
             }
         }
         KeyCombination::None => {}
-    }
+    };
 
     false
 }
@@ -233,7 +284,8 @@ pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> boo
 /// New implementation of input event handling with cleaner structure
 /// using match statements for different stages of input processing
 #[allow(clippy::needless_pass_by_value)]
-pub fn handle_input_event(app: &mut App, event: Event) {
+pub fn handle_input_event(app: &mut App, event: Event, key_tracker: &KeyCombinationTracker) {
+
     match event {
         Event::Key(key_event) => {
             // Handle regular key events with match statements
@@ -245,6 +297,12 @@ pub fn handle_input_event(app: &mut App, event: Event) {
 
                 // Enter key (without modifiers from device_query)
                 KeyCode::Enter => {
+                    // Skip Enter key processing if Shift is being held down
+                    // This prevents crossterm from intercepting Shift+Enter before device_query can detect it
+                    if key_tracker.shift_pressed {
+
+                        return;
+                    }
                     // First update the input field
                     app.display_container_state
                         .get_input_mut()
@@ -324,8 +382,12 @@ fn handle_enter_command(app: &mut App) {
         }
     };
 
+    // Execute commands and collect any returned task IDs
+    let mut created_task_ids = Vec::new();
     for cmd in commands {
-        execute_command(app, Some(cmd));
+        if let Some(task_id) = execute_command(app, Some(cmd)) {
+            created_task_ids.push(task_id);
+        }
     }
     
     // Check if we need to restore focus to the original task

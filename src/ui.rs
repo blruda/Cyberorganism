@@ -96,7 +96,7 @@ impl DisplayContainerState {
     pub fn new() -> Self {
         Self {
             display_to_id: Vec::new(),
-            focused_index: Some(0), // Start focused on "Create new task"
+            focused_index: Some(0), // Start focused on "Create new task or enter commands"
             original_focus: None,
             input: Input::default(),
             active_container: crate::taskstore::TaskContainer::Taskpad,
@@ -107,7 +107,7 @@ impl DisplayContainerState {
     /// Updates the display order based on the current tasks.
     /// Only includes tasks in the taskpad container (not archived).
     /// The display will show tasks as a numbered list starting from 1,
-    /// with a special "Create new task" entry at index 0.
+    /// with a special "Create new task or enter commands" entry at index 0.
     /// For tasks with subtasks:
     /// - Only top-level tasks are shown by default
     /// - Subtasks are shown only when their parent is expanded
@@ -205,12 +205,12 @@ impl DisplayContainerState {
             .map(|i| i + 1)
     }
 
-    /// Returns the number of tasks in the display (excluding "Create new task" entry)
+    /// Returns the number of tasks in the display (excluding "Create new task or enter commands" entry)
     pub fn len(&self) -> usize {
         self.display_to_id.len()
     }
 
-    /// Returns true if there are no tasks in the display (may still have "Create new task" entry)
+    /// Returns true if there are no tasks in the display (may still have "Create new task or enter commands" entry)
     pub fn is_empty(&self) -> bool {
         self.display_to_id.is_empty()
     }
@@ -221,7 +221,7 @@ impl DisplayContainerState {
         self.focused_index = Some(match self.focused_index {
             Some(0) => max_index, // Wrap to bottom
             Some(current) => current - 1,
-            None => 0, // Start at "Create new task"
+            None => 0, // Start at "Create new task or enter commands"
         });
     }
 
@@ -231,7 +231,7 @@ impl DisplayContainerState {
         self.focused_index = Some(match self.focused_index {
             Some(current) if current >= max_index => 0, // Wrap to top
             Some(current) => current + 1,
-            None => 0, // Start at "Create new task"
+            None => 0, // Start at "Create new task or enter commands"
         });
     }
 
@@ -241,10 +241,10 @@ impl DisplayContainerState {
     }
 
     /// Gets the content of the currently focused task.
-    /// Returns None if no task is focused or if the focused item is the "Create new task" entry.
+    /// Returns None if no task is focused or if the focused item is the "Create new task or enter commands" entry.
     pub fn get_focused_task_content<'a>(&self, tasks: &'a [Task]) -> Option<&'a str> {
         match self.focused_index {
-            Some(0) => None, // "Create new task" entry
+            Some(0) => None, // "Create new task or enter commands" entry
             Some(idx) if idx <= self.display_to_id.len() => {
                 let task_id = self.display_to_id[idx - 1];
                 tasks
@@ -469,19 +469,38 @@ fn format_task_line<'a>(
     let depth = task_index.path().len() - 1; // Depth is one less than path length
     let indent = "  ".repeat(depth); // Two spaces per level
 
+    // Define the style to use for all spans if the task is focused
+    let focused_style = Style::default().add_modifier(Modifier::REVERSED);
+    
     // Add task index
-    spans.push(Span::raw(format!("{indent}{task_index}")));
+    spans.push(if is_focused {
+        Span::styled(format!("{indent}{task_index}"), focused_style)
+    } else {
+        Span::raw(format!("{indent}{task_index}"))
+    });
 
     // Only add period after index for top-level tasks
     if depth == 0 {
-        spans.push(Span::raw(". "));
+        spans.push(if is_focused {
+            Span::styled(". ", focused_style)
+        } else {
+            Span::raw(". ")
+        });
     } else {
-        spans.push(Span::raw(" "));
+        spans.push(if is_focused {
+            Span::styled(" ", focused_style)
+        } else {
+            Span::raw(" ")
+        });
     }
 
     // Add completion status indicator
     if task.status == TaskStatus::Done {
-        spans.push(Span::styled("✓ ", Style::default().fg(ACCENT_COLOR)));
+        spans.push(if is_focused {
+            Span::styled("✓ ", focused_style.fg(ACCENT_COLOR))
+        } else {
+            Span::styled("✓ ", Style::default().fg(ACCENT_COLOR))
+        });
     }
 
     // Add expansion indicator if task has children
@@ -491,7 +510,11 @@ fn format_task_line<'a>(
         } else {
             "▶ "
         };
-        spans.push(Span::raw(indicator.to_string()));
+        spans.push(if is_focused {
+            Span::styled(indicator, focused_style)
+        } else {
+            Span::raw(indicator)
+        });
     }
 
     // Calculate remaining width for task content
@@ -513,7 +536,7 @@ fn format_task_line<'a>(
     };
 
     spans.push(if is_focused {
-        Span::styled(content, Style::default().add_modifier(Modifier::REVERSED))
+        Span::styled(content, focused_style)
     } else {
         Span::raw(content)
     });
@@ -531,14 +554,14 @@ fn create_task_lines<'a>(
     let mut lines = Vec::new();
     let mut display_index = 1; // Track the current display index for focus
 
-    // Add the "Create new task" entry at index 0
+    // Add the "Create new task or enter commands" entry at index 0
     let create_task_style = if focused_index == Some(0) {
         Style::default().fg(Color::Black).bg(ACCENT_COLOR)
     } else {
         Style::default().fg(ACCENT_COLOR)
     };
     lines.push(Line::from(vec![Span::styled(
-        "<Create new task>",
+        "<Create new task or enter commands>",
         create_task_style,
     )]));
 
@@ -1040,9 +1063,9 @@ mod tests {
         assert_eq!(
             lines.len(),
             3,
-            "Should include 'Create new task' and two tasks"
+            "Should include 'Create new task or enter commands' and two tasks"
         );
-        assert!(lines[0].spans[0].content.contains("<Create new task>"));
+        assert!(lines[0].spans[0].content.contains("<Create new task or enter commands>"));
 
         // Check task lines by combining their spans
         let task1_content: String = lines[1]
@@ -1111,7 +1134,7 @@ mod tests {
             },
         ];
 
-        // Initially at "Create new task", input should be empty
+        // Initially at "Create new task or enter commands", input should be empty
         state.update_display_order(&tasks);
         state.focused_index = Some(0);
         state.update_input_for_focus(&tasks);
@@ -1254,7 +1277,7 @@ mod tests {
         assert_eq!(state.display_to_id[0], 1);
         
         // Make sure we can't navigate to the folded tasks
-        // Set focus to index 0 ("Create new task" entry)
+        // Set focus to index 0 ("Create new task or enter commands" entry)
         state.focused_index = Some(0);
         
         // Try to navigate to the next task (Task 1)

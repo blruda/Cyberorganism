@@ -181,7 +181,7 @@ fn handle_shift_enter(app: &mut App) -> bool {
     log_debug("Handling Shift+Enter for subtask creation");
 
     match app.display_container_state.focused_index {
-        // Handle Shift+Enter on the "Create new task" input line
+        // Handle Shift+Enter on the "Create new task or enter commands" input line
         Some(0) | None => handle_shift_enter_on_input_line(app),
         // Handle Shift+Enter on an existing task
         Some(idx) => handle_shift_enter_on_task(app, idx),

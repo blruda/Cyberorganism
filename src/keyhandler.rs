@@ -163,7 +163,12 @@ fn handle_ctrl_navigation(app: &mut App, combination: KeyCombination) -> bool {
                 .copied()
             {
                 log_debug(&format!("Toggling expansion for task ID: {task_id}"));
-                app.display_container_state.toggle_task_expansion(task_id);
+                app.display_container_state.toggle_task_expansion(task_id, &app.tasks);
+                
+                // Update the display order to reflect the new expansion state
+                // This ensures subtasks are properly shown/hidden in the display list
+                app.display_container_state.update_display_order(&app.tasks);
+                
                 return true;
             }
         }
@@ -351,7 +356,12 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
             if let Some(current) = app.display_container_state.focused_index {
                 // If at index 0, wrap to the last item
                 let new_index = if current == 0 {
-                    app.display_container_state.display_to_id.len()
+                    // Wrap to the last valid index, not one past it
+                    if app.display_container_state.display_to_id.is_empty() {
+                        0
+                    } else {
+                        app.display_container_state.display_to_id.len()
+                    }
                 } else {
                     current - 1
                 };
@@ -363,7 +373,9 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
         KeyCode::Down => {
             if let Some(current) = app.display_container_state.focused_index {
                 // If at last index, wrap to 0
-                let new_index = if current >= app.display_container_state.display_to_id.len() {
+                let new_index = if current >= app.display_container_state.display_to_id.len() || 
+                                 (current == app.display_container_state.display_to_id.len() - 1 && 
+                                  !app.display_container_state.display_to_id.is_empty()) {
                     0
                 } else {
                     current + 1

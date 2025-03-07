@@ -376,7 +376,7 @@ pub fn execute_add_subtask(app: &mut App, query_or_id: &str, content: &str) -> O
 fn execute_toggle_command(app: &mut App, query: &str) {
     if let Some(index) = find_task(app, query) {
         let task_id = app.tasks[index].id;
-        app.display_container_state.toggle_task_expansion(task_id);
+        app.display_container_state.toggle_task_expansion(task_id, &app.tasks);
         app.log_activity(format!("Toggled task: {}", app.tasks[index].content));
     } else {
         app.log_activity("No matching task found".to_string());

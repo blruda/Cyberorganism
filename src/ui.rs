@@ -63,6 +63,10 @@ pub fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -
 /// Manages the display state of tasks in the taskpad.
 /// Tasks are displayed as a numbered list (1. Task A, 2. Task B, etc.)
 /// with each task truncated to fit within a single line if necessary.
+/// 
+/// IMPORTANT: The display_to_id list contains only visible tasks based on the current
+/// folding state. Whenever the folding state (folded_tasks) is modified,
+/// update_display_order must be called to ensure the display list is synchronized.
 #[derive(Debug)]
 pub struct DisplayContainerState {
     /// List of task IDs for top-level tasks in the current container.
@@ -296,13 +300,18 @@ impl DisplayContainerState {
         &mut self.input
     }
 
-    /// Toggle the expansion state of a task
-    pub fn toggle_task_expansion(&mut self, task_id: u32) {
+    /// Toggle the expansion state of a task and update the display list
+    /// 
+    /// This ensures that the display_to_id list is always in sync with the folding state.
+    pub fn toggle_task_expansion(&mut self, task_id: u32, tasks: &[Task]) {
         if self.folded_tasks.contains(&task_id) {
             self.folded_tasks.remove(&task_id);
         } else {
             self.folded_tasks.insert(task_id);
         }
+        
+        // Always update display order after changing folding state
+        self.update_display_order(tasks);
     }
 
     /// Check if a task is expanded
@@ -805,10 +814,10 @@ mod tests {
         assert_eq!(state.get_task_id_by_path("1.1", &tasks), None); // Not visible until parent is expanded
 
         // After expanding task 1, its child becomes visible
-        state.toggle_task_expansion(1);
+        state.toggle_task_expansion(1, &tasks);
         // println!("\nAfter expansion:");
         // println!("Task 1 expanded? {}", state.is_task_expanded(1));
-        state.update_display_order(&tasks);
+        // Note: update_display_order is now called automatically by toggle_task_expansion
         // println!("display_to_id after expansion: {:?}", state.display_to_id);
         // println!("len after expansion: {}", state.len());
         assert_eq!(state.len(), 2); // Now both task 1 and task 3 are visible
@@ -1213,5 +1222,55 @@ mod tests {
 
         // Input should reset
         assert_eq!(state.input_value(), "");
+    }
+
+    #[test]
+    fn test_folded_tasks_not_in_display_list() {
+        // This test ensures that when a task is folded, its subtasks are properly
+        // removed from the display_to_id list and can't be navigated to.
+        // This test specifically targets the bug where folded subtasks were still
+        // appearing in the display_to_id list.
+        
+        // Create a task hierarchy: Task 1 -> Task 2 -> Task 3
+        let tasks = vec![
+            TaskBuilder::new(1).content("Task 1").children(vec![2]).build(),
+            TaskBuilder::new(2).content("Task 2").parent(1).children(vec![3]).build(),
+            TaskBuilder::new(3).content("Task 3").parent(2).build(),
+        ];
+
+        let mut state = DisplayContainerState::default();
+        state.active_container = TaskContainer::Taskpad;
+        
+        // By default, all tasks are expanded, so update_display_order should show all tasks
+        state.update_display_order(&tasks);
+        assert_eq!(state.display_to_id.len(), 3);
+        assert_eq!(state.display_to_id[0], 1);
+        assert_eq!(state.display_to_id[1], 2);
+        assert_eq!(state.display_to_id[2], 3);
+        
+        // Fold Task 1, which should remove both Task 2 and Task 3 from the display list
+        state.toggle_task_expansion(1, &tasks);
+        assert_eq!(state.display_to_id.len(), 1);
+        assert_eq!(state.display_to_id[0], 1);
+        
+        // Make sure we can't navigate to the folded tasks
+        // Set focus to index 0 ("Create new task" entry)
+        state.focused_index = Some(0);
+        
+        // Try to navigate to the next task (Task 1)
+        state.focus_next();
+        assert_eq!(state.focused_index, Some(1)); // Should move to Task 1 (index 1)
+        
+        // Expand Task 1 again, which should make Task 2 visible again
+        state.toggle_task_expansion(1, &tasks);
+        assert_eq!(state.display_to_id.len(), 3);
+        assert_eq!(state.display_to_id[0], 1);
+        assert_eq!(state.display_to_id[1], 2);
+        assert_eq!(state.display_to_id[2], 3);
+        
+        // Now we should be able to navigate to Task 2
+        state.focused_index = Some(0);
+        state.focus_next();
+        assert_eq!(state.focused_index, Some(1)); // Should move to Task 2 (index 1)
     }
 }

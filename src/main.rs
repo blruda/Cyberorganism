@@ -4,11 +4,12 @@
 
 mod commands;
 mod debug;
+mod display_container;
 mod keyhandler;
+mod rendering;
 mod taskstore;
-mod ui;
 
-use crate::ui::{ActivityLog, DisplayContainerState};
+use crate::display_container::{ActivityLog, DisplayContainerState};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::Terminal;
 use std::io;
@@ -91,9 +92,13 @@ impl App {
 /// Runs the application, setting up the terminal,
 /// loading the initial state from disk if available,
 /// and processes user input until exit.
+/// 
+/// TODO: GUI REFACTOR - This function will need to be modified to support
+/// a GUI implementation by abstracting the UI initialization and event loop.
 fn main() -> io::Result<()> {
-    // Set up terminal
-    let mut terminal = ui::setup_terminal()?;
+    // TODO: GUI REFACTOR - This TUI-specific setup will need to be replaced or abstracted
+    // for GUI implementation
+    let mut terminal = rendering::setup_terminal()?;
 
     // Create app state
     let mut app = App::new();
@@ -105,11 +110,12 @@ fn main() -> io::Result<()> {
         app.display_container_state.update_display_order(&app.tasks);
     }
 
-    // Run app
+    // TODO: GUI REFACTOR - This will need to be abstracted to support both TUI and GUI
+    // implementations, possibly with a UI trait or factory pattern
     run_app(&mut terminal, app)?;
 
-    // Restore terminal
-    ui::restore_terminal(&mut terminal)?;
+    // TODO: GUI REFACTOR - TUI-specific cleanup that will need to be abstracted
+    rendering::restore_terminal(&mut terminal)?;
     Ok(())
 }
 
@@ -117,19 +123,25 @@ fn main() -> io::Result<()> {
 ///
 /// This function will loop until it sees an escape key or control-c.
 /// It will then return, and the application will exit.
+/// 
+/// TODO: GUI REFACTOR - This function contains TUI-specific event handling and rendering.
+/// It should be refactored to use an abstract UI interface that can be implemented
+/// by both TUI and GUI backends.
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
 ) -> io::Result<()> {
-    // Initialize the key combination tracker with a moderate debounce
+    // TODO: GUI REFACTOR - TUI-specific input handling that will need to be abstracted
+    // or replaced for GUI implementation
     let mut key_tracker = keyhandler::KeyCombinationTracker::new(100);
 
     // Use a moderate polling timeout to balance responsiveness and stability
     let polling_timeout = Duration::from_millis(33); // ~30 fps
 
     loop {
-        // Draw the UI
-        terminal.draw(|f| ui::draw(f, &app))?;
+        // TODO: GUI REFACTOR - TUI-specific rendering that will need to be abstracted
+        // for GUI implementation, possibly with a Renderer trait
+        terminal.draw(|f| rendering::draw(f, &app))?;
 
         // Check for device_query key combinations
         let combination = key_tracker.check_combinations();
@@ -138,7 +150,8 @@ fn run_app<B: ratatui::backend::Backend>(
             // This prevents bypassing the debounce mechanism
         }
 
-        // Poll for crossterm events with a short timeout
+        // TODO: GUI REFACTOR - TUI-specific event handling that will need to be abstracted
+        // for GUI implementation, possibly with an EventHandler trait
         if event::poll(polling_timeout)? {
             let event = event::read()?;
             if let Event::Key(key) = event {

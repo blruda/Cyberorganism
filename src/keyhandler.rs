@@ -8,8 +8,7 @@ use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::HashSet;
 use std::time::Instant;
 
-use crossterm::event::{Event, KeyCode};
-use tui_input::backend::crossterm::EventHandler;
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 
 use crate::App;
 use crate::commands::{
@@ -163,12 +162,13 @@ fn handle_ctrl_navigation(app: &mut App, combination: KeyCombination) -> bool {
                 .copied()
             {
                 log_debug(&format!("Toggling expansion for task ID: {task_id}"));
-                app.display_container_state.toggle_task_expansion(task_id, &app.tasks);
-                
+                app.display_container_state
+                    .toggle_task_expansion(task_id, &app.tasks);
+
                 // Update the display order to reflect the new expansion state
                 // This ensures subtasks are properly shown/hidden in the display list
                 app.display_container_state.update_display_order(&app.tasks);
-                
+
                 return true;
             }
         }
@@ -329,9 +329,7 @@ pub fn handle_input_event(app: &mut App, event: Event, key_tracker: &KeyCombinat
                         return;
                     }
                     // First update the input field
-                    app.display_container_state
-                        .get_input_mut()
-                        .handle_event(&event);
+                    handle_input_event_for_field(app, &event);
 
                     // Then process the command
                     handle_enter_command(app);
@@ -339,9 +337,7 @@ pub fn handle_input_event(app: &mut App, event: Event, key_tracker: &KeyCombinat
 
                 // All other keys - pass to the input field handler
                 _ => {
-                    app.display_container_state
-                        .get_input_mut()
-                        .handle_event(&event);
+                    handle_input_event_for_field(app, &event);
                 }
             }
         }
@@ -373,9 +369,10 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
         KeyCode::Down => {
             if let Some(current) = app.display_container_state.focused_index {
                 // If at last index, wrap to 0
-                let new_index = if current >= app.display_container_state.display_to_id.len() || 
-                                 (current == app.display_container_state.display_to_id.len() - 1 && 
-                                  !app.display_container_state.display_to_id.is_empty()) {
+                let new_index = if current >= app.display_container_state.display_to_id.len()
+                    || (current == app.display_container_state.display_to_id.len() - 1
+                        && !app.display_container_state.display_to_id.is_empty())
+                {
                     0
                 } else {
                     current + 1
@@ -432,5 +429,76 @@ fn handle_enter_command(app: &mut App) {
         app.display_container_state.original_focus = None;
 
         log_debug("Restored focus to parent task after subtask creation");
+    }
+}
+
+/// Handle keyboard input events for the input field
+/// This is a replacement for the previous implementation that used tui_input
+fn handle_input_event_for_field(app: &mut App, event: &Event) {
+    if let Event::Key(key_event) = event {
+        // Get mutable references to the input value and cursor position
+        let (input_value, cursor_pos) = app.display_container_state.get_input_mut();
+        
+        match key_event.code {
+            // Handle backspace - delete character before cursor
+            KeyCode::Backspace => {
+                if *cursor_pos > 0 {
+                    input_value.remove(*cursor_pos - 1);
+                    *cursor_pos -= 1;
+                }
+            }
+            
+            // Handle delete - delete character at cursor
+            KeyCode::Delete => {
+                if *cursor_pos < input_value.len() {
+                    input_value.remove(*cursor_pos);
+                }
+            }
+            
+            // Handle left arrow - move cursor left
+            KeyCode::Left => {
+                if *cursor_pos > 0 {
+                    *cursor_pos -= 1;
+                }
+            }
+            
+            // Handle right arrow - move cursor right
+            KeyCode::Right => {
+                if *cursor_pos < input_value.len() {
+                    *cursor_pos += 1;
+                }
+            }
+            
+            // Handle home - move cursor to start
+            KeyCode::Home => {
+                *cursor_pos = 0;
+            }
+            
+            // Handle end - move cursor to end
+            KeyCode::End => {
+                *cursor_pos = input_value.len();
+            }
+            
+            // Handle character input
+            KeyCode::Char(c) => {
+                // Check for Ctrl+A (select all) - move cursor to end
+                if c == 'a' && key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    *cursor_pos = input_value.len();
+                    return;
+                }
+                
+                // Insert character at cursor position
+                input_value.insert(*cursor_pos, c);
+                *cursor_pos += 1;
+            }
+            
+            // Handle Enter key
+            KeyCode::Enter => {
+                // Enter is handled separately in handle_input_event
+            }
+            
+            // Ignore other keys
+            _ => {}
+        }
     }
 }

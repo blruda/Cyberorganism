@@ -7,5 +7,15 @@ debug.log
 # Windsurf
 .windsurfrules
 
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.npm
+
+# Build outputs
+src/plugin/dist/
+
 # Misc.
 notes/

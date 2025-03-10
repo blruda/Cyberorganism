@@ -2,6 +2,7 @@
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::items_after_statements)]
+#![allow(dead_code)] // Allow dead code in TUI implementation as we're transitioning to GUI
 
 //! Rendering functions for the terminal user interface using ratatui.
 //! Handles drawing the UI components and terminal setup/teardown.

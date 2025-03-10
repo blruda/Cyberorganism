@@ -4,6 +4,8 @@
 //! - Regular keyboard event handling via crossterm
 //! - Special key combination detection via `device_query`
 
+#![allow(dead_code)] // Allow dead code in TUI implementation as we're transitioning to GUI
+
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::HashSet;
 use std::time::Instant;
@@ -41,6 +43,7 @@ pub struct KeyCombinationTracker {
     pub shift_pressed: bool,
 }
 
+#[allow(dead_code)]
 impl KeyCombinationTracker {
     /// Creates a new key combination tracker
     pub fn new(debounce_ms: u64) -> Self {
@@ -130,6 +133,7 @@ impl KeyCombinationTracker {
 
 /// Handles a detected key combination and applies it to the app state
 /// Main dispatcher function for handling key combinations
+#[allow(dead_code)]
 pub fn handle_key_combination(app: &mut App, combination: KeyCombination) -> bool {
     match combination {
         KeyCombination::CtrlUp | KeyCombination::CtrlDown => {
@@ -279,6 +283,7 @@ fn handle_shift_enter_on_task(app: &mut App, idx: usize) -> bool {
 }
 
 /// Handles Ctrl+Enter key combination for task completion
+#[allow(dead_code)]
 fn handle_ctrl_enter(app: &mut App) -> bool {
     log_debug("Handling Ctrl+Enter");
     let input = app.display_container_state.input_value().to_string();
@@ -389,6 +394,7 @@ fn handle_navigation_keys(app: &mut App, key_code: KeyCode) {
 
 /// Handle regular Enter key command processing
 #[allow(clippy::option_if_let_else)]
+#[allow(dead_code)]
 fn handle_enter_command(app: &mut App) {
     let input = app.display_container_state.input_value().to_string();
     if input.is_empty() {

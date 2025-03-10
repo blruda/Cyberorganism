@@ -5,15 +5,14 @@
 mod commands;
 mod debug;
 mod display_container;
-mod keyhandler;
-mod rendering;
+mod gui;
 mod taskstore;
 
+// Keep TUI modules for reference
+mod tui;
+
 use crate::display_container::{ActivityLog, DisplayContainerState};
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::Terminal;
-use std::io;
-use std::time::Duration;
+use std::fmt;
 use taskstore::{Task, load_tasks};
 
 /// Represents the current state of the application
@@ -89,17 +88,21 @@ impl App {
     }
 }
 
-/// Runs the application, setting up the terminal,
-/// loading the initial state from disk if available,
-/// and processes user input until exit.
-/// 
-/// TODO: GUI REFACTOR - This function will need to be modified to support
-/// a GUI implementation by abstracting the UI initialization and event loop.
-fn main() -> io::Result<()> {
-    // TODO: GUI REFACTOR - This TUI-specific setup will need to be replaced or abstracted
-    // for GUI implementation
-    let mut terminal = rendering::setup_terminal()?;
+// Create a wrapper for eframe::Error that implements Send and Sync
+#[derive(Debug)]
+struct AppError(String);
 
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Application error: {}", self.0)
+    }
+}
+
+impl std::error::Error for AppError {}
+
+/// Runs the application, loading the initial state from disk if available,
+/// and starting the GUI.
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create app state
     let mut app = App::new();
 
@@ -110,58 +113,13 @@ fn main() -> io::Result<()> {
         app.display_container_state.update_display_order(&app.tasks);
     }
 
-    // TODO: GUI REFACTOR - This will need to be abstracted to support both TUI and GUI
-    // implementations, possibly with a UI trait or factory pattern
-    run_app(&mut terminal, app)?;
+    // Run the GUI application
+    if let Err(e) = gui::run_app(app) {
+        eprintln!("Error running application: {}", e);
+        return Err(Box::new(AppError(e.to_string())));
+    }
 
-    // TODO: GUI REFACTOR - TUI-specific cleanup that will need to be abstracted
-    rendering::restore_terminal(&mut terminal)?;
     Ok(())
 }
 
-/// Manages the main event loop of the application.
-///
-/// This function will loop until it sees an escape key or control-c.
-/// It will then return, and the application will exit.
-/// 
-/// TODO: GUI REFACTOR - This function contains TUI-specific event handling and rendering.
-/// It should be refactored to use an abstract UI interface that can be implemented
-/// by both TUI and GUI backends.
-fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    mut app: App,
-) -> io::Result<()> {
-    // TODO: GUI REFACTOR - TUI-specific input handling that will need to be abstracted
-    // or replaced for GUI implementation
-    let mut key_tracker = keyhandler::KeyCombinationTracker::new(100);
-
-    // Use a moderate polling timeout to balance responsiveness and stability
-    let polling_timeout = Duration::from_millis(33); // ~30 fps
-
-    loop {
-        // TODO: GUI REFACTOR - TUI-specific rendering that will need to be abstracted
-        // for GUI implementation, possibly with a Renderer trait
-        terminal.draw(|f| rendering::draw(f, &app))?;
-
-        // Check for device_query key combinations
-        let combination = key_tracker.check_combinations();
-        if keyhandler::handle_key_combination(&mut app, combination) {
-            // Don't immediately continue - instead, proceed to the event polling
-            // This prevents bypassing the debounce mechanism
-        }
-
-        // TODO: GUI REFACTOR - TUI-specific event handling that will need to be abstracted
-        // for GUI implementation, possibly with an EventHandler trait
-        if event::poll(polling_timeout)? {
-            let event = event::read()?;
-            if let Event::Key(key) = event {
-                if key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL
-                    || key.code == KeyCode::Esc
-                {
-                    return Ok(());
-                }
-                keyhandler::handle_input_event(&mut app, event, &key_tracker);
-            }
-        }
-    }
-}
+// Note: The run_app function has been moved to the gui module

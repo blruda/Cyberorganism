@@ -3,8 +3,18 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::items_after_statements)]
 
-//! Terminal user interface implementation using ratatui. Manages terminal setup,
-//! teardown, and rendering of the task management interface.
+//! Display state management for tasks in both TUI and GUI implementations.
+//! 
+//! # Important Functions
+//! When working with tasks in the UI, you often need to convert between task IDs and display indices:
+//! 
+//! - Use `DisplayContainerState::get_display_index(task_id)` to get a task's display index from its ID
+//! - Use `DisplayContainerState::get_task_id_by_path(path)` to get a task's ID from its display path
+//! 
+//! # Display State Management
+//! The display container maintains the mapping between task IDs and their current display order,
+//! taking into account task hierarchy and folding state. Always use the above functions
+//! to convert between IDs and display indices rather than calculating indices manually.
 
 use std::fmt;
 

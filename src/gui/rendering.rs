@@ -325,15 +325,36 @@ impl GuiApp {
     
     /// Render the input field
     fn render_input(&mut self, ui: &mut egui::Ui) {
-        // Add a subtle accent-colored border to the input area
-        ui.visuals_mut().widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, ACCENT_COLOR.linear_multiply(0.7));
-        
         // Add consistent margins to match the task list
         egui::Frame::none()
             .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    let response = ui.text_edit_singleline(&mut self.input_text);
+                    // Customize the visuals to make the border always visible
+                    // Store the original visuals
+                    let original_inactive = ui.visuals().widgets.inactive.clone();
+                    let original_active = ui.visuals().widgets.active.clone();
+                    
+                    // Modify the visuals for this scope
+                    ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, ACCENT_COLOR);
+                    ui.visuals_mut().widgets.active.bg_stroke = egui::Stroke::new(2.0, ACCENT_COLOR);
+                    
+                    // Use a custom text edit with a visible background
+                    let text_edit = egui::TextEdit::singleline(&mut self.input_text)
+                        .desired_width(f32::INFINITY) // Make it take full width
+                        .hint_text("Enter task or command..."); // Add hint text
+                    
+                    // Request focus on the text edit
+                    let response = text_edit.show(ui).response;
+                    
+                    // Restore the original visuals
+                    ui.visuals_mut().widgets.inactive = original_inactive;
+                    ui.visuals_mut().widgets.active = original_active;
+                    
+                    // Request keyboard focus when the app starts
+                    if ui.ctx().input(|i| i.time) < 0.5 { // Only during the first 0.5 seconds
+                        response.request_focus();
+                    }
                     
                     // Handle Enter key
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -341,6 +362,9 @@ impl GuiApp {
                         if !self.input_text.is_empty() {
                             self.app.log_activity(format!("Entered: {}", self.input_text));
                             self.input_text.clear();
+                            
+                            // Request focus again after submitting
+                            response.request_focus();
                         }
                     }
                 });

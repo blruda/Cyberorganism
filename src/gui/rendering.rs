@@ -339,6 +339,9 @@ impl GuiApp {
                     ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, ACCENT_COLOR);
                     ui.visuals_mut().widgets.active.bg_stroke = egui::Stroke::new(2.0, ACCENT_COLOR);
                     
+                    // Store the current text length for cursor positioning
+                    let cursor_pos = self.input_text.len();
+                    
                     // Use a custom text edit with a visible background
                     let text_edit = egui::TextEdit::singleline(&mut self.input_text)
                         .desired_width(f32::INFINITY) // Make it take full width
@@ -357,16 +360,7 @@ impl GuiApp {
                         response.request_focus();
                         self.app.display_container_state.initial_startup = false;
                     } else if self.app.display_container_state.request_focus_next_frame {
-                        // When requesting focus, we need to manually set the cursor position
-                        // to the end of the text input
                         response.request_focus();
-                        if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
-                            // Set cursor position to the end of the text
-                            let cursor_pos = self.input_text.len();
-                            let new_ccursor = egui::text::CCursor::new(cursor_pos);
-                            state.cursor.set_char_range(Some(egui::text::CCursorRange::one(new_ccursor)));
-                            state.store(ui.ctx(), response.id);
-                        }
                         self.app.display_container_state.request_focus_next_frame = false;
                     }
                     
@@ -374,10 +368,17 @@ impl GuiApp {
                     if self.app.display_container_state.request_cursor_at_end {
                         // Set cursor position to the end of the text
                         if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
-                            let cursor_pos = self.input_text.len();
                             let new_ccursor = egui::text::CCursor::new(cursor_pos);
                             state.cursor.set_char_range(Some(egui::text::CCursorRange::one(new_ccursor)));
                             state.store(ui.ctx(), response.id);
+                            
+                            // Try a second time to ensure the cursor position sticks
+                            // This is a workaround for the cursor position issue with up arrow key
+                            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
+                                let new_ccursor = egui::text::CCursor::new(cursor_pos);
+                                state.cursor.set_char_range(Some(egui::text::CCursorRange::one(new_ccursor)));
+                                state.store(ui.ctx(), response.id);
+                            }
                         }
                         self.app.display_container_state.request_cursor_at_end = false;
                     }

@@ -141,6 +141,8 @@ impl KeyHandler {
                                         app.display_container_state.original_focus = None;
                                         // Request focus for the input field on the next frame
                                         app.display_container_state.request_focus_next_frame = true;
+                                        // Request cursor at the end of the text
+                                        app.display_container_state.request_cursor_at_end = true;
                                     }
                                     
                                     // Don't clear the input field when editing a task
@@ -168,6 +170,8 @@ impl KeyHandler {
                             app.display_container_state.update_input_for_focus(&app.tasks);
                             // Update the input_text to match the display container's input value
                             *input_text = app.display_container_state.input_value().to_string();
+                            // Request cursor at the end of the text
+                            app.display_container_state.request_cursor_at_end = true;
                             handled = true;
                         }
                     }
@@ -181,6 +185,8 @@ impl KeyHandler {
                             app.display_container_state.update_input_for_focus(&app.tasks);
                             // Update the input_text to match the display container's input value
                             *input_text = app.display_container_state.input_value().to_string();
+                            // Request cursor at the end of the text
+                            app.display_container_state.request_cursor_at_end = true;
                             handled = true;
                         }
                     }

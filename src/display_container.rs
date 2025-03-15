@@ -50,6 +50,8 @@ pub struct DisplayContainerState {
     pub initial_startup: bool,
     /// Flag to request focus on the next frame
     pub request_focus_next_frame: bool,
+    /// Flag to request cursor at the end of the text
+    pub request_cursor_at_end: bool,
 }
 
 impl Default for DisplayContainerState {
@@ -70,6 +72,7 @@ impl DisplayContainerState {
             folded_tasks: std::collections::HashSet::new(),
             initial_startup: true,
             request_focus_next_frame: false,
+            request_cursor_at_end: false,
         }
     }
 

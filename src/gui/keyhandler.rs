@@ -139,6 +139,9 @@ impl KeyHandler {
                                 let command = parse_command(input);
                                 execute_command(app, Some(command));
                                 
+                                // Explicitly refocus on the input line after command execution
+                                app.display_container_state.focus_task_and_update_input(None, &app.tasks);
+                                
                                 // Update the input_text to match the display container's input value
                                 *input_text = app.display_container_state.input_value().to_string();
                             },

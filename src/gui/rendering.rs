@@ -357,7 +357,16 @@ impl GuiApp {
                         response.request_focus();
                         self.app.display_container_state.initial_startup = false;
                     } else if self.app.display_container_state.request_focus_next_frame {
+                        // When requesting focus, we need to manually set the cursor position
+                        // to the end of the text input
                         response.request_focus();
+                        if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
+                            // Set cursor position to the end of the text
+                            let cursor_pos = self.input_text.len();
+                            let new_ccursor = egui::text::CCursor::new(cursor_pos);
+                            state.cursor.set_char_range(Some(egui::text::CCursorRange::one(new_ccursor)));
+                            state.store(ui.ctx(), response.id);
+                        }
                         self.app.display_container_state.request_focus_next_frame = false;
                     }
                     

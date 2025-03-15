@@ -71,32 +71,33 @@ impl KeyHandler {
                                 
                                 // Update focus to the new task
                                 if let Some(display_idx) = app.display_container_state.get_display_index(new_task_id) {
-                                    app.display_container_state.focused_index = Some(display_idx + 1); // +1 because 0 is "Create new task"
+                                    app.display_container_state.focused_index = Some(display_idx); // get_display_index already adds +1
                                 }
                             }
                         } else if (index - 1) < app.display_container_state.display_to_id.len() {
                             // Create a subtask under the selected task
                             let parent_id = app.display_container_state.display_to_id[index - 1];
-                            if let Some(parent_idx) = app.tasks.iter().position(|t| t.id == parent_id) {
-                                let parent_content = app.tasks[parent_idx].content.clone();
-                                
-                                if !input_text.is_empty() {
-                                    // Create subtask with the current input text
-                                    let subtask_id = execute_add_subtask(app, &parent_id.to_string(), input_text);
-                                    *input_text = String::new();
-                                    
-                                    // Make sure the parent task is expanded
-                                    if !app.display_container_state.is_task_expanded(parent_id) {
-                                        app.display_container_state.toggle_task_expansion(parent_id, &app.tasks);
-                                    }
-                                    
-                                    // Update focus to the new subtask
-                                    if let Some(new_subtask_id) = subtask_id {
-                                        if let Some(display_idx) = app.display_container_state.get_display_index(new_subtask_id) {
-                                            app.display_container_state.focused_index = Some(display_idx + 1); // +1 because 0 is "Create new task"
-                                            app.log_activity(format!("Created subtask {} under: {}", display_idx + 1, parent_content));
-                                        }
-                                    }
+                            
+                            // Store the original focus for returning later
+                            app.display_container_state.original_focus = Some(index);
+                            
+                            // Create an empty subtask
+                            let subtask_id = execute_add_subtask(app, &parent_id.to_string(), "");
+                            
+                            // Make sure the parent task is expanded
+                            if !app.display_container_state.is_task_expanded(parent_id) {
+                                app.display_container_state.toggle_task_expansion(parent_id, &app.tasks);
+                            }
+                            
+                            // Update focus to the new subtask
+                            if let Some(new_subtask_id) = subtask_id {
+                                if let Some(display_idx) = app.display_container_state.get_display_index(new_subtask_id) {
+                                    app.display_container_state.focused_index = Some(display_idx); // get_display_index already adds +1
+                                    app.display_container_state.update_input_for_focus(&app.tasks);
+                                    *input_text = app.display_container_state.input_value().to_string();
+                                    app.log_activity(format!("Created subtask under: {}", app.tasks.iter().find(|t| t.id == parent_id).map_or("Unknown", |t| &t.content)));
+                                    // Request focus for the input field on the next frame
+                                    app.display_container_state.request_focus_next_frame = true;
                                 }
                             }
                         }
@@ -122,6 +123,25 @@ impl KeyHandler {
                                 if (idx - 1) < app.display_container_state.display_to_id.len() {
                                     let task_id = app.display_container_state.display_to_id[idx - 1];
                                     execute_command(app, Some(Command::Edit(task_id, input)));
+                                    
+                                    // Check if we need to restore focus to the original task
+                                    // This happens after editing a subtask created with Shift+Enter
+                                    if let Some(original_idx) = app.display_container_state.original_focus {
+                                        // Restore the original focus
+                                        app.display_container_state.focused_index = Some(original_idx);
+                                        // Update the input field to show the original task's content
+                                        app.display_container_state.update_input_for_focus(&app.tasks);
+                                        
+                                        // First clear the input text completely to force a reset of any internal state
+                                        *input_text = String::new();
+                                        // Then set it to the new value
+                                        *input_text = app.display_container_state.input_value().to_string();
+                                        
+                                        // Clear the original focus now that we've restored it
+                                        app.display_container_state.original_focus = None;
+                                        // Request focus for the input field on the next frame
+                                        app.display_container_state.request_focus_next_frame = true;
+                                    }
                                     
                                     // Don't clear the input field when editing a task
                                     // But still request focus for the next frame
@@ -192,9 +212,6 @@ impl KeyHandler {
         
         // Update display order after any interaction
         app.display_container_state.update_display_order(&app.tasks);
-        
-        // Request focus for the input field after handling interactions
-        ctx.request_repaint();
         
         handled
     }

@@ -170,7 +170,7 @@ fn execute_complete_command(app: &mut App, query: &str) {
 }
 
 /// Execute a complete by ID command
-fn execute_complete_by_id_command(app: &mut App, task_id: u32) {
+pub fn execute_complete_by_id_command(app: &mut App, task_id: u32) {
     match complete_task(app, "", Some(task_id)) {
         CommandResult::TaskCompleted { content } => {
             app.log_activity(format!("Completed task: {content}"));

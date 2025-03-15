@@ -7,13 +7,6 @@ use eframe::egui;
 use crate::App;
 use crate::commands::{Command, parse_command, execute_command, execute_create_command, execute_add_subtask};
 
-/// Request focus for the input field
-pub fn request_input_focus(ctx: &egui::Context) {
-    // Use the same consistent ID as in rendering.rs
-    let input_id = egui::Id::new("main_input_field");
-    ctx.memory_mut(|mem| mem.request_focus(input_id));
-}
-
 /// Handles keyboard shortcuts and input events
 pub struct KeyHandler {
     /// Whether shift key is currently pressed

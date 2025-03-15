@@ -273,11 +273,7 @@ fn focus_task(app: &mut App, query: &str) -> FocusResult {
         let task = &app.tasks[index];
         let content = task.content.clone();
 
-        // Find the display index for this task
-        if let Some(display_idx) = app.display_container_state.get_display_index(task.id) {
-            app.display_container_state.focused_index = Some(display_idx);
-            // Also update input buffer with task content
-            app.display_container_state.set_input(&content);
+        if app.display_container_state.focus_task_and_update_input(Some(task.id), &app.tasks) {
             FocusResult::Focused { content }
         } else {
             FocusResult::NoMatchingTask

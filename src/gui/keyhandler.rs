@@ -55,9 +55,10 @@ impl KeyHandler {
                             // Then complete the task by ID
                             execute_command(app, Some(Command::CompleteById(task_id)));
                             
-                            // Clear the input field
-                            *input_text = String::new();
-                            app.display_container_state.request_focus_next_frame = true;
+                            // Focus on the input line and clear input
+                            app.display_container_state.focus_task_and_update_input(None, &app.tasks);
+                            // Update the input_text to match the display container's input value
+                            *input_text = app.display_container_state.input_value().to_string();
                         }
                     }
                 } else if self.shift_pressed {
@@ -67,12 +68,11 @@ impl KeyHandler {
                             // Create a new top-level task when on the input line
                             if !input_text.is_empty() {
                                 let new_task_id = execute_create_command(app, input_text);
-                                *input_text = String::new();
                                 
-                                // Update focus to the new task
-                                if let Some(display_idx) = app.display_container_state.get_display_index(new_task_id) {
-                                    app.display_container_state.focused_index = Some(display_idx); // get_display_index already adds +1
-                                }
+                                // Focus on the new task using the unified method
+                                app.display_container_state.focus_task_and_update_input(Some(new_task_id), &app.tasks);
+                                // Update the input_text to match the display container's input value
+                                *input_text = app.display_container_state.input_value().to_string();
                             }
                         } else if (index - 1) < app.display_container_state.display_to_id.len() {
                             // Create a subtask under the selected task
@@ -91,13 +91,11 @@ impl KeyHandler {
                             
                             // Update focus to the new subtask
                             if let Some(new_subtask_id) = subtask_id {
-                                if let Some(display_idx) = app.display_container_state.get_display_index(new_subtask_id) {
-                                    app.display_container_state.focused_index = Some(display_idx); // get_display_index already adds +1
-                                    app.display_container_state.update_input_for_focus(&app.tasks);
+                                // Use the unified method to focus and update input
+                                if app.display_container_state.focus_task_and_update_input(Some(new_subtask_id), &app.tasks) {
+                                    // Update the input_text to match the display container's input value
                                     *input_text = app.display_container_state.input_value().to_string();
                                     app.log_activity(format!("Created subtask under: {}", app.tasks.iter().find(|t| t.id == parent_id).map_or("Unknown", |t| &t.content)));
-                                    // Request focus for the input field on the next frame
-                                    app.display_container_state.request_focus_next_frame = true;
                                 }
                             }
                         }
@@ -114,9 +112,8 @@ impl KeyHandler {
                                 let command = parse_command(input);
                                 execute_command(app, Some(command));
                                 
-                                // Only clear the input field when on the input line
-                                *input_text = String::new();
-                                app.display_container_state.request_focus_next_frame = true;
+                                // Update the input_text to match the display container's input value
+                                *input_text = app.display_container_state.input_value().to_string();
                             },
                             Some(idx) => {
                                 // On a task - edit the task content
@@ -127,27 +124,30 @@ impl KeyHandler {
                                     // Check if we need to restore focus to the original task
                                     // This happens after editing a subtask created with Shift+Enter
                                     if let Some(original_idx) = app.display_container_state.original_focus {
-                                        // Restore the original focus
-                                        app.display_container_state.focused_index = Some(original_idx);
-                                        // Update the input field to show the original task's content
-                                        app.display_container_state.update_input_for_focus(&app.tasks);
+                                        // Get the task ID for the original focus
+                                        let original_task_id = if original_idx > 0 && (original_idx - 1) < app.display_container_state.display_to_id.len() {
+                                            Some(app.display_container_state.display_to_id[original_idx - 1])
+                                        } else {
+                                            None
+                                        };
                                         
-                                        // First clear the input text completely to force a reset of any internal state
-                                        *input_text = String::new();
-                                        // Then set it to the new value
-                                        *input_text = app.display_container_state.input_value().to_string();
+                                        // Use the unified method to focus and update input
+                                        if app.display_container_state.focus_task_and_update_input(original_task_id, &app.tasks) {
+                                            // Update the input_text to match the display container's input value
+                                            *input_text = app.display_container_state.input_value().to_string();
+                                        }
                                         
                                         // Clear the original focus now that we've restored it
                                         app.display_container_state.original_focus = None;
-                                        // Request focus for the input field on the next frame
-                                        app.display_container_state.request_focus_next_frame = true;
-                                        // Request cursor at the end of the text
-                                        app.display_container_state.request_cursor_at_end = true;
+                                    } else {
+                                        // If no original focus to restore, maintain focus on the current task
+                                        // This ensures we don't lose focus after editing a task
+                                        app.display_container_state.focus_task_and_update_input(Some(task_id), &app.tasks);
+                                        // Update the input_text to match the display container's input value
+                                        *input_text = app.display_container_state.input_value().to_string();
                                     }
                                     
                                     // Don't clear the input field when editing a task
-                                    // But still request focus for the next frame
-                                    app.display_container_state.request_focus_next_frame = true;
                                 }
                             }
                         }
@@ -165,14 +165,23 @@ impl KeyHandler {
                 if i.key_pressed(egui::Key::ArrowUp) {
                     if let Some(index) = app.display_container_state.focused_index {
                         if index > 0 {
-                            app.display_container_state.focused_index = Some(index - 1);
-                            // Update the input field with the content of the newly focused task
-                            app.display_container_state.update_input_for_focus(&app.tasks);
-                            // Update the input_text to match the display container's input value
-                            *input_text = app.display_container_state.input_value().to_string();
-                            // Request cursor at the end of the text
-                            app.display_container_state.request_cursor_at_end = true;
-                            handled = true;
+                            // Calculate the task ID to focus on
+                            let task_id = if index == 1 {
+                                // Moving from index 1 to 0 (input line)
+                                None
+                            } else if (index - 1) < app.display_container_state.display_to_id.len() {
+                                // Moving to a task (index - 2 because we're going up and display_to_id is 0-indexed)
+                                Some(app.display_container_state.display_to_id[index - 2])
+                            } else {
+                                None
+                            };
+                            
+                            // Use the unified method to focus and update input
+                            if app.display_container_state.focus_task_and_update_input(task_id, &app.tasks) {
+                                // Update the input_text to match the display container's input value
+                                *input_text = app.display_container_state.input_value().to_string();
+                                handled = true;
+                            }
                         }
                     }
                 }
@@ -180,14 +189,27 @@ impl KeyHandler {
                 if i.key_pressed(egui::Key::ArrowDown) {
                     if let Some(index) = app.display_container_state.focused_index {
                         if index < app.display_container_state.display_to_id.len() {
-                            app.display_container_state.focused_index = Some(index + 1);
-                            // Update the input field with the content of the newly focused task
-                            app.display_container_state.update_input_for_focus(&app.tasks);
-                            // Update the input_text to match the display container's input value
-                            *input_text = app.display_container_state.input_value().to_string();
-                            // Request cursor at the end of the text
-                            app.display_container_state.request_cursor_at_end = true;
-                            handled = true;
+                            // Calculate the task ID to focus on
+                            let task_id = if index == 0 {
+                                // Moving from input line (index 0) to first task
+                                if !app.display_container_state.display_to_id.is_empty() {
+                                    Some(app.display_container_state.display_to_id[0])
+                                } else {
+                                    None
+                                }
+                            } else if (index - 1) < app.display_container_state.display_to_id.len() - 1 {
+                                // Moving to next task (index - 1 + 1 because display_to_id is 0-indexed)
+                                Some(app.display_container_state.display_to_id[index])
+                            } else {
+                                None
+                            };
+                            
+                            // Use the unified method to focus and update input
+                            if app.display_container_state.focus_task_and_update_input(task_id, &app.tasks) {
+                                // Update the input_text to match the display container's input value
+                                *input_text = app.display_container_state.input_value().to_string();
+                                handled = true;
+                            }
                         }
                     }
                 }

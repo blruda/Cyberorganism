@@ -52,6 +52,8 @@ pub struct DisplayContainerState {
     pub request_focus_next_frame: bool,
     /// Flag to request cursor at the end of the text
     pub request_cursor_at_end: bool,
+    /// Flag to indicate that the input buffer needs to be synchronized with the GUI
+    pub sync_input_with_gui: bool,
 }
 
 impl Default for DisplayContainerState {
@@ -73,6 +75,7 @@ impl DisplayContainerState {
             initial_startup: true,
             request_focus_next_frame: false,
             request_cursor_at_end: false,
+            sync_input_with_gui: false,
         }
     }
 
@@ -268,6 +271,41 @@ impl DisplayContainerState {
                 }
             }
         }
+    }
+
+    /// Focuses on a task and updates the input buffer in a unified way
+    /// Returns true if focus was successfully set, false otherwise
+    pub fn focus_task_and_update_input(&mut self, task_id: Option<u32>, tasks: &[Task]) -> bool {
+        // If task_id is None, focus on input line (index 0)
+        if task_id.is_none() {
+            self.focused_index = Some(0);
+            self.reset_input();
+            self.request_focus_next_frame = true;
+            self.request_cursor_at_end = true;
+            self.sync_input_with_gui = true;
+            return true;
+        }
+        
+        // Otherwise, find display index for task and focus on it
+        if let Some(id) = task_id {
+            if let Some(display_idx) = self.get_display_index(id) {
+                self.focused_index = Some(display_idx);
+                
+                // Update input buffer with task content
+                if let Some(task) = tasks.iter().find(|t| t.id == id) {
+                    self.set_input(&task.content);
+                } else {
+                    self.reset_input();
+                }
+                
+                self.request_focus_next_frame = true;
+                self.request_cursor_at_end = true;
+                self.sync_input_with_gui = true;
+                return true;
+            }
+        }
+        
+        false
     }
 
     pub fn set_cursor_position(&mut self, position: usize) {

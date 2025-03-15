@@ -364,6 +364,12 @@ impl GuiApp {
                         self.app.display_container_state.request_focus_next_frame = false;
                     }
                     
+                    // Synchronize input text with DisplayContainerState if needed
+                    if self.app.display_container_state.sync_input_with_gui {
+                        self.input_text = self.app.display_container_state.input_value().to_string();
+                        self.app.display_container_state.sync_input_with_gui = false;
+                    }
+                    
                     // Handle cursor positioning
                     if self.app.display_container_state.request_cursor_at_end {
                         // Set cursor position to the end of the text

@@ -1,3 +1,41 @@
+// Display container state module
+//
+// This module contains the DisplayContainerState struct which manages the display state
+// of tasks and their input buffers.
+//
+// # Focus and Input Buffer Management
+//
+// The DisplayContainerState implements a unified approach to managing focus and input buffers
+// through the `focus_task_and_update_input` method. This method should be used whenever
+// changing focus between tasks or the input line to ensure consistent behavior.
+//
+// ## Key Principles:
+//
+// 1. Always use `focus_task_and_update_input` to change focus, rather than directly
+//    manipulating `focused_index`.
+//
+// 2. The method handles:
+//    - Setting the correct focus index
+//    - Updating the input buffer with the appropriate content
+//    - Setting flags for UI focus and cursor positioning
+//    - Setting the sync flag to ensure GuiApp's input_text is synchronized
+//
+// 3. After calling `focus_task_and_update_input`, always update the GUI's input text:
+//    ```rust
+//    if app.display_container_state.focus_task_and_update_input(task_id, &app.tasks) {
+//        *input_text = app.display_container_state.input_value().to_string();
+//    }
+//    ```
+//
+// 4. When executing commands that change focus (like the focus command), do not
+//    override the focus afterward. Let the command's focus change persist.
+//
+// 5. When editing a task, explicitly maintain focus on that task after the edit
+//    by calling `focus_task_and_update_input` again with the same task ID.
+//
+// This unified approach ensures consistent behavior across all focus-changing operations
+// and proper synchronization between DisplayContainerState and GuiApp.
+
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::too_many_arguments)]

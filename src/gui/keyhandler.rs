@@ -1,3 +1,25 @@
+// Keyboard input handling module
+//
+// This module handles keyboard input for task creation, editing, and navigation.
+//
+// # Focus and Input Buffer Management
+//
+// This module follows the unified focus and input buffer management approach
+// implemented in the `DisplayContainerState.focus_task_and_update_input` method.
+// For detailed documentation on this approach, see the top of the `display_container.rs` file.
+//
+// Key guidelines for this module:
+//
+// 1. Always use `focus_task_and_update_input` when changing focus
+// 2. Update the GUI's input text after calling the method
+// 3. Maintain focus on tasks after editing them
+// 4. Do not reset focus after executing commands that explicitly change focus
+// 5. IMPORTANT: Never use any form of `request_repaint()` as it causes crashes
+//    and freezes in the application
+//
+// Following these guidelines ensures consistent behavior across all keyboard operations
+// and proper synchronization between DisplayContainerState and GuiApp.
+
 //! GUI input handling implementation.
 //! 
 //! This module handles keyboard and mouse input for the GUI implementation.

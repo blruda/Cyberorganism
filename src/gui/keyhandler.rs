@@ -7,6 +7,13 @@ use eframe::egui;
 use crate::App;
 use crate::commands::{Command, parse_command, execute_command, execute_create_command, execute_add_subtask};
 
+/// Request focus for the input field
+pub fn request_input_focus(ctx: &egui::Context) {
+    // Use the same consistent ID as in rendering.rs
+    let input_id = egui::Id::new("main_input_field");
+    ctx.memory_mut(|mem| mem.request_focus(input_id));
+}
+
 /// Handles keyboard shortcuts and input events
 pub struct KeyHandler {
     /// Whether shift key is currently pressed
@@ -57,6 +64,7 @@ impl KeyHandler {
                             
                             // Clear the input field
                             *input_text = String::new();
+                            app.display_container_state.request_focus_next_frame = true;
                         }
                     }
                 } else if self.shift_pressed {
@@ -112,18 +120,26 @@ impl KeyHandler {
                                 let command = parse_command(input);
                                 execute_command(app, Some(command));
                                 
-                                // Clear the input field only after executing a command from the input line
+                                // Only clear the input field when on the input line
                                 *input_text = String::new();
+                                app.display_container_state.request_focus_next_frame = true;
                             },
                             Some(idx) => {
                                 // On a task - edit the task content
                                 if (idx - 1) < app.display_container_state.display_to_id.len() {
                                     let task_id = app.display_container_state.display_to_id[idx - 1];
                                     execute_command(app, Some(Command::Edit(task_id, input)));
-                                    // Don't clear the input field after editing a task
+                                    
+                                    // Don't clear the input field when editing a task
+                                    // But still request focus for the next frame
+                                    app.display_container_state.request_focus_next_frame = true;
                                 }
                             }
                         }
+                        
+                        // Don't request focus after processing command
+                        // This was causing a crash when pressing Enter
+                        // request_input_focus(ctx);
                     }
                 }
                 handled = true;

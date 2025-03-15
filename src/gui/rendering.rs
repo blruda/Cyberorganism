@@ -342,7 +342,8 @@ impl GuiApp {
                     // Use a custom text edit with a visible background
                     let text_edit = egui::TextEdit::singleline(&mut self.input_text)
                         .desired_width(f32::INFINITY) // Make it take full width
-                        .hint_text("Enter task or command..."); // Add hint text
+                        .hint_text("Enter task or command...") // Add hint text
+                        .id(egui::Id::new("main_input_field")); // Use a consistent ID
                     
                     // Request focus on the text edit
                     let response = text_edit.show(ui).response;
@@ -351,21 +352,17 @@ impl GuiApp {
                     ui.visuals_mut().widgets.inactive = original_inactive;
                     ui.visuals_mut().widgets.active = original_active;
                     
-                    // Always request keyboard focus
-                    response.request_focus();
-                    
-                    // Handle Enter key
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        // Only clear the input if we're on the input line (index 0)
-                        // Don't clear it if we're editing a task
-                        if !self.input_text.is_empty() && self.app.display_container_state.focused_index == Some(0) {
-                            self.app.log_activity(format!("Entered: {}", self.input_text));
-                            self.input_text.clear();
-                            
-                            // Request focus again after submitting
-                            response.request_focus();
-                        }
+                    // Only request focus during initial startup or when explicitly requested
+                    if self.app.display_container_state.initial_startup {
+                        response.request_focus();
+                        self.app.display_container_state.initial_startup = false;
+                    } else if self.app.display_container_state.request_focus_next_frame {
+                        response.request_focus();
+                        self.app.display_container_state.request_focus_next_frame = false;
                     }
+                    
+                    // NOTE: Enter key handling is done in keyhandler.rs
+                    // Do not handle Enter key here to avoid conflicts
                 });
             });
     }

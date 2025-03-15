@@ -46,6 +46,10 @@ pub struct DisplayContainerState {
     pub active_container: crate::taskstore::TaskContainer,
     /// Set of task IDs that are folded (not showing their children)
     pub folded_tasks: std::collections::HashSet<u32>,
+    /// Flag to indicate initial startup for focus management
+    pub initial_startup: bool,
+    /// Flag to request focus on the next frame
+    pub request_focus_next_frame: bool,
 }
 
 impl Default for DisplayContainerState {
@@ -64,6 +68,8 @@ impl DisplayContainerState {
             input_cursor: 0,
             active_container: crate::taskstore::TaskContainer::Taskpad,
             folded_tasks: std::collections::HashSet::new(),
+            initial_startup: true,
+            request_focus_next_frame: false,
         }
     }
 

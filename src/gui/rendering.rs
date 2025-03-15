@@ -351,10 +351,8 @@ impl GuiApp {
                     ui.visuals_mut().widgets.inactive = original_inactive;
                     ui.visuals_mut().widgets.active = original_active;
                     
-                    // Request keyboard focus when the app starts
-                    if ui.ctx().input(|i| i.time) < 0.5 { // Only during the first 0.5 seconds
-                        response.request_focus();
-                    }
+                    // Always request keyboard focus
+                    response.request_focus();
                     
                     // Handle Enter key
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {

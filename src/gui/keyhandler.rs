@@ -184,6 +184,9 @@ impl KeyHandler {
         // Update display order after any interaction
         app.display_container_state.update_display_order(&app.tasks);
         
+        // Request focus for the input field after handling interactions
+        ctx.request_repaint();
+        
         handled
     }
 }

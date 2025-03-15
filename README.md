@@ -5,8 +5,7 @@ Cyberorganism is a keyboard-driven Personal Knowledge Management (PKM) applicati
 ## Features
 
 - **Keyboard-First Interface**: Navigate and manage your tasks without touching the mouse
-- **Task Management**: Create, organize, and track tasks with parent-child relationships
-- **Container System**: Organize tasks in different containers (Taskpad, Backburner, etc.)
+- **Task Management**: Create, organize, and track tasks in a hierarchical outliner
 - **Minimalist UI**: Clean, distraction-free interface built with egui
 
 ## Status

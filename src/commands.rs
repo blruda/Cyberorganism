@@ -174,6 +174,9 @@ pub fn execute_complete_by_id_command(app: &mut App, task_id: u32) {
     match complete_task(app, "", Some(task_id)) {
         CommandResult::TaskCompleted { content } => {
             app.log_activity(format!("Completed task: {content}"));
+            if let Err(e) = save_tasks(&app.tasks, &app.tasks_file) {
+                app.log_activity(format!("Error saving tasks: {e}"));
+            }
         }
         CommandResult::TaskAlreadyArchived(content) => {
             app.log_activity(format!("Task '{content}' is already archived"));

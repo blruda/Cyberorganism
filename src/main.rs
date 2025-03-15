@@ -8,9 +8,6 @@ mod display_container;
 mod gui;
 mod taskstore;
 
-// Keep TUI modules for reference
-mod tui;
-
 use crate::display_container::{ActivityLog, DisplayContainerState};
 use std::fmt;
 use taskstore::{Task, load_tasks};

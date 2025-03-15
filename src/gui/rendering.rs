@@ -358,8 +358,9 @@ impl GuiApp {
                     
                     // Handle Enter key
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        // TODO: Implement command handling
-                        if !self.input_text.is_empty() {
+                        // Only clear the input if we're on the input line (index 0)
+                        // Don't clear it if we're editing a task
+                        if !self.input_text.is_empty() && self.app.display_container_state.focused_index == Some(0) {
                             self.app.log_activity(format!("Entered: {}", self.input_text));
                             self.input_text.clear();
                             

@@ -111,18 +111,19 @@ impl KeyHandler {
                                 // On input line - parse and execute the command
                                 let command = parse_command(input);
                                 execute_command(app, Some(command));
+                                
+                                // Clear the input field only after executing a command from the input line
+                                *input_text = String::new();
                             },
                             Some(idx) => {
                                 // On a task - edit the task content
                                 if (idx - 1) < app.display_container_state.display_to_id.len() {
                                     let task_id = app.display_container_state.display_to_id[idx - 1];
                                     execute_command(app, Some(Command::Edit(task_id, input)));
+                                    // Don't clear the input field after editing a task
                                 }
                             }
                         }
-                        
-                        // Clear the input field
-                        *input_text = String::new();
                     }
                 }
                 handled = true;

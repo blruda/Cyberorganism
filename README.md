@@ -1,12 +1,12 @@
 # Cyberorganism
 
-Cyberorganism is a streamlined, keyboard-driven Personal Knowledge Management (PKM) application built in Rust. It provides a minimalist interface for managing tasks and notes with a focus on efficiency through keyboard shortcuts.
+Cyberorganism is a keyboard-driven Personal Knowledge Management (PKM) application built in Rust. It provides a minimalist interface for managing tasks and notes with a focus on efficiency and intelligent context management.
 
 ## Features
 
 - **Keyboard-First Interface**: Navigate and manage your tasks without touching the mouse
 - **Task Management**: Create, organize, and track tasks with parent-child relationships
-- **Container System**: Organize tasks in different containers (Taskpad, Archive, etc.)
+- **Container System**: Organize tasks in different containers (Taskpad, Backburner, etc.)
 - **Minimalist UI**: Clean, distraction-free interface built with egui
 
 ## Status
@@ -17,6 +17,12 @@ This is an early prototype focused on core functionality. Future development pla
 
 ```
 cargo build
+```
+
+## Running
+
+```
+cargo run
 ```
 
 ## License

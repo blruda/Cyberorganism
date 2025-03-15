@@ -387,6 +387,54 @@ impl DisplayContainerState {
     pub fn fold_tasks(&mut self, task_ids: &[u32]) {
         self.folded_tasks.extend(task_ids.iter().copied());
     }
+
+    /// Find the nearest task at the same level in the display order
+    /// 
+    /// For top-level tasks, this finds the nearest top-level task
+    /// For subtasks, it uses find_nearest_sibling to find siblings under the same parent
+    /// 
+    /// Returns the task ID if found, None otherwise
+    pub fn find_nearest_task_at_same_level(&self, tasks: &[Task], task_id: u32) -> Option<u32> {
+        // Find the task
+        let task = tasks.iter().find(|t| t.id == task_id)?;
+        
+        // Check if it's a subtask
+        if task.parent_id.is_some() {
+            // For subtasks, find the nearest sibling
+            return crate::taskstore::operations::find_nearest_sibling(tasks, task_id);
+        }
+        
+        // For top-level tasks, find the nearest top-level task in the display order
+        // First, find the index of the task in the display order
+        let display_index = self.display_to_id.iter().position(|&id| id == task_id)?;
+        
+        // Try to find a top-level task above first
+        let mut current_index = display_index;
+        while current_index > 0 {
+            current_index -= 1;
+            let candidate_id = self.display_to_id[current_index];
+            if let Some(candidate) = tasks.iter().find(|t| t.id == candidate_id) {
+                if candidate.parent_id.is_none() {
+                    return Some(candidate_id);
+                }
+            }
+        }
+        
+        // If no top-level task above, try to find one below
+        let mut current_index = display_index;
+        while current_index + 1 < self.display_to_id.len() {
+            current_index += 1;
+            let candidate_id = self.display_to_id[current_index];
+            if let Some(candidate) = tasks.iter().find(|t| t.id == candidate_id) {
+                if candidate.parent_id.is_none() {
+                    return Some(candidate_id);
+                }
+            }
+        }
+        
+        // No tasks at the same level found
+        None
+    }
 }
 
 /// Represents a hierarchical task index like "1.2.3"

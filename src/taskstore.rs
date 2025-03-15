@@ -139,6 +139,37 @@ pub mod operations {
             tasks[parent_index].child_ids.remove(child_index);
         }
     }
+
+    /// Find the nearest sibling of a task
+    /// 
+    /// Returns the ID of the nearest sibling task, preferring siblings above the current task
+    /// If no siblings are found, returns None
+    pub fn find_nearest_sibling(tasks: &[Task], task_id: u32) -> Option<u32> {
+        // Find the task
+        let task = tasks.iter().find(|t| t.id == task_id)?;
+        
+        // If it's a top-level task, return None
+        let parent_id = task.parent_id?;
+        
+        // Find the parent task
+        let parent = tasks.iter().find(|t| t.id == parent_id)?;
+        
+        // Get the index of the current task in the parent's child_ids
+        let current_index = parent.child_ids.iter().position(|&id| id == task_id)?;
+        
+        // Try to find a sibling above first
+        if current_index > 0 {
+            return Some(parent.child_ids[current_index - 1]);
+        }
+        
+        // If no sibling above, try to find a sibling below
+        if current_index + 1 < parent.child_ids.len() {
+            return Some(parent.child_ids[current_index + 1]);
+        }
+        
+        // No siblings found
+        None
+    }
 }
 
 /// Finds a task in a slice of tasks by its ID

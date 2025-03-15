@@ -74,11 +74,16 @@ impl KeyHandler {
                                 execute_command(app, Some(Command::Edit(task_id, input_text.clone())));
                             }
                             
-                            // Then complete the task by ID
+                            // Find the nearest task at the same level before completing the task
+                            let nearest_task_id = app.display_container_state.find_nearest_task_at_same_level(&app.tasks, task_id);
+                            
+                            // Complete the task by ID
                             execute_command(app, Some(Command::CompleteById(task_id)));
                             
-                            // Focus on the input line and clear input
-                            app.display_container_state.focus_task_and_update_input(None, &app.tasks);
+                            // After completion, focus on the nearest task at the same level if available
+                            // Otherwise, focus on the input line
+                            app.display_container_state.focus_task_and_update_input(nearest_task_id, &app.tasks);
+                            
                             // Update the input_text to match the display container's input value
                             *input_text = app.display_container_state.input_value().to_string();
                         }

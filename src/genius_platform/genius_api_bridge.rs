@@ -72,6 +72,12 @@ pub struct GeniusApiBridge {
     last_response: Option<GeniusResponse>,
     /// Flag indicating if a request is in progress
     request_in_progress: bool,
+    /// Current page number (1-based)
+    current_page: usize,
+    /// Current query text
+    current_query: String,
+    /// All items loaded so far (across all pages)
+    all_items: Vec<GeniusItem>,
 }
 
 impl GeniusApiBridge {
@@ -81,6 +87,9 @@ impl GeniusApiBridge {
             api_client: GeniusApiClient::new(),
             last_response: None,
             request_in_progress: false,
+            current_page: 1,
+            current_query: String::new(),
+            all_items: Vec::new(),
         }
     }
 
@@ -90,6 +99,9 @@ impl GeniusApiBridge {
             api_client,
             last_response: None,
             request_in_progress: false,
+            current_page: 1,
+            current_query: String::new(),
+            all_items: Vec::new(),
         }
     }
 
@@ -122,27 +134,79 @@ impl GeniusApiBridge {
     /// This method takes a reference to the App (for potential future context)
     /// and the input text to query. It returns the API response or an error.
     pub fn query_with_input(&mut self, _app: &App, input: &str) -> Result<GeniusResponse, GeniusApiError> {
-        self.execute_query(input)
+        // If the query text has changed, reset pagination
+        if input != self.current_query {
+            self.current_page = 1;
+            self.current_query = input.to_string();
+            self.all_items.clear();
+        }
+        
+        self.execute_query_with_page(input, self.current_page)
     }
 
-    /// Execute a query with the given input string
+    /// Load the next page of results for the current query
+    pub fn load_next_page(&mut self) -> Result<GeniusResponse, GeniusApiError> {
+        println!("[DEBUG] GeniusApiBridge: load_next_page() called (current_page: {}, current_query: '{}')", 
+            self.current_page, self.current_query);
+            
+        if self.current_query.is_empty() {
+            println!("[DEBUG] GeniusApiBridge: load_next_page() failed - empty query");
+            return Err(GeniusApiError::Other("No current query to load more results for".to_string()));
+        }
+        
+        // Increment the page number
+        self.current_page += 1;
+        println!("[DEBUG] GeniusApiBridge: Incrementing page to {}", self.current_page);
+        
+        // Create local copies of the values we need
+        let query = self.current_query.clone();
+        let page = self.current_page;
+        
+        // Call execute_query_with_page with the local copies
+        let result = self.execute_query_with_page(&query, page);
+        
+        // Log the result
+        match &result {
+            Ok(response) => {
+                println!("[DEBUG] GeniusApiBridge: load_next_page() succeeded - got {} items", response.items.len());
+            },
+            Err(e) => {
+                println!("[DEBUG] GeniusApiBridge: load_next_page() failed - {}", e);
+            }
+        }
+        
+        result
+    }
+
+    /// Execute a query with the given input string and page number
     /// 
     /// This is the core method that actually sends the query to the API
     /// and handles the response.
-    fn execute_query(&mut self, query: &str) -> Result<GeniusResponse, GeniusApiError> {
+    fn execute_query_with_page(&mut self, query: &str, page: usize) -> Result<GeniusResponse, GeniusApiError> {
         // Mark that a request is in progress
         self.request_in_progress = true;
         
-        println!("[DEBUG] GeniusApiBridge: Executing query: '{}'", query);
+        println!("[DEBUG] GeniusApiBridge: Executing query: '{}' (page {})", query, page);
         
-        // Execute the query using the API client
-        let result = self.api_client.query_sync(query);
+        // Execute the query using the API client with the specified page
+        let result = self.api_client.query_sync_with_page(query, page);
         
         // Update the last response and request status
         match &result {
             Ok(response) => {
                 println!("[DEBUG] GeniusApiBridge: Query successful, received {} items", response.items.len());
+                
+                // Store the response
                 self.last_response = Some(response.clone());
+                
+                // If this is page 1, clear the all_items list
+                if page == 1 {
+                    self.all_items.clear();
+                }
+                
+                // Add the new items to the all_items list
+                self.all_items.extend(response.items.clone());
+                
                 self.request_in_progress = false;
             }
             Err(e) => {
@@ -152,6 +216,13 @@ impl GeniusApiBridge {
         }
         
         result
+    }
+
+    /// Execute a query with the given input string (page 1)
+    /// 
+    /// This is a wrapper around execute_query_with_page for backward compatibility
+    fn execute_query(&mut self, query: &str) -> Result<GeniusResponse, GeniusApiError> {
+        self.execute_query_with_page(query, 1)
     }
 
     /// Get the descriptions from the last API response
@@ -187,6 +258,29 @@ impl GeniusApiBridge {
     /// Get a reference to the global GeniusApiBridge instance
     pub fn global() -> std::sync::MutexGuard<'static, Self> {
         super::get_api_bridge()
+    }
+
+    /// Get all items loaded so far (across all pages)
+    pub fn all_items(&self) -> &[GeniusItem] {
+        &self.all_items
+    }
+
+    /// Get the current page number
+    pub fn current_page(&self) -> usize {
+        self.current_page
+    }
+
+    /// Check if there are more pages to load
+    /// 
+    /// For now, we'll assume there are always more pages to load
+    /// In a real implementation, this would check if we've reached the end of the results
+    pub fn has_more_pages(&self) -> bool {
+        // In a real implementation, this would check if we've reached the end of the results
+        // For now, we'll assume there are always more pages to load if we have a current query
+        let has_more = !self.current_query.is_empty();
+        println!("[DEBUG] GeniusApiBridge: has_more_pages() = {} (current_query: '{}', current_page: {})", 
+            has_more, self.current_query, self.current_page);
+        has_more
     }
 }
 

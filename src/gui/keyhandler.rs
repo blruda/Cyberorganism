@@ -27,9 +27,8 @@
 
 use eframe::egui;
 use crate::App;
-use crate::commands::{Command, parse_command, execute_command, execute_create_command, execute_add_subtask};
-use crate::genius_platform;
-use std::time::{Duration, Instant};
+use crate::commands::{Command, parse_command, execute_command, execute_create_command, execute_add_subtask, toggle_app_mode};
+use crate::gui::genius_feed;
 
 /// Handles keyboard shortcuts and input events
 pub struct KeyHandler {
@@ -37,12 +36,6 @@ pub struct KeyHandler {
     shift_pressed: bool,
     /// Whether control key is currently pressed
     ctrl_pressed: bool,
-    /// Last time an API request was made
-    last_api_request: Option<Instant>,
-    /// Minimum time between API requests (rate limiting)
-    min_request_interval: Duration,
-    /// Last input text that was sent to the API
-    last_query_text: String,
 }
 
 impl KeyHandler {
@@ -51,9 +44,6 @@ impl KeyHandler {
         Self {
             shift_pressed: false,
             ctrl_pressed: false,
-            last_api_request: None,
-            min_request_interval: Duration::from_millis(50), // 50ms minimum between requests
-            last_query_text: String::new(),
         }
     }
     
@@ -74,10 +64,21 @@ impl KeyHandler {
         self.update_modifiers(ctx);
         
         // Check if we should query the API based on input changes and rate limiting
-        self.maybe_query_api(app, input_text);
+        genius_feed::maybe_query_api(app, input_text);
         
         // Check for key presses
         ctx.input(|i| {
+            // TODO: Tab key navigation is problematic in egui and causes focus issues.
+            // We need to investigate a proper fix for tab navigation in the future.
+            // For now, we're using Ctrl+Space instead of Shift+Tab for mode switching.
+            
+            // Check for Ctrl+Space to toggle mode
+            if i.key_pressed(egui::Key::Space) && self.ctrl_pressed {
+                app.app_mode = toggle_app_mode(app, app.app_mode);
+                handled = true;
+                return;
+            }
+            
             // Handle Enter key with modifiers
             if i.key_pressed(egui::Key::Enter) {
                 if self.ctrl_pressed {
@@ -289,37 +290,5 @@ impl KeyHandler {
         app.display_container_state.update_display_order(&app.tasks);
         
         handled
-    }
-    
-    /// Query the API if conditions are met (rate limiting and input changed)
-    fn maybe_query_api(&mut self, app: &mut App, input_text: &str) {
-        // Skip empty input
-        if input_text.is_empty() {
-            return;
-        }
-        
-        // Skip if input hasn't changed since last query
-        if input_text == self.last_query_text {
-            return;
-        }
-        
-        // Check if enough time has passed since the last request
-        let should_query = match self.last_api_request {
-            Some(last_time) => {
-                let elapsed = last_time.elapsed();
-                elapsed >= self.min_request_interval
-            },
-            None => true, // First request
-        };
-        
-        if should_query {
-            // Update the last query time and text
-            self.last_api_request = Some(Instant::now());
-            self.last_query_text = input_text.to_string();
-            
-            // Query the API using the global API bridge
-            let mut api_bridge = genius_platform::get_api_bridge();
-            let _ = api_bridge.query_with_input(app, input_text);
-        }
     }
 }

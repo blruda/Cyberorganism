@@ -9,6 +9,21 @@ use crate::taskstore::{
     Task, TaskContainer, TaskStatus, find_task_by_content, find_task_by_id, save_tasks,
 };
 
+/// Represents the application interaction mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+    /// Default mode for PKM task management
+    Pkm,
+    /// Mode for interacting with Genius Feed
+    Feed,
+}
+
+impl Default for AppMode {
+    fn default() -> Self {
+        Self::Pkm
+    }
+}
+
 /// Commands that can be executed by the user
 pub enum Command {
     Create(String),
@@ -23,6 +38,7 @@ pub enum Command {
     Show(TaskContainer),        // Switch active container
     AddSubtask(String, String), // (parent_query, subtask_content)
     Toggle(String),             // Toggle expansion state of a task
+    ToggleAppMode,              // Toggle application mode
 }
 
 /// Parses the input string into a Command
@@ -57,6 +73,8 @@ pub fn parse_command(input: String) -> Command {
             return Command::AddSubtask(parts[0].to_string(), parts[1].to_string());
         }
         Command::Create(input) // Invalid format, treat as task creation
+    } else if input.to_lowercase() == "toggle app mode" {
+        Command::ToggleAppMode
     } else {
         Command::Create(input)
     }
@@ -383,6 +401,22 @@ fn execute_toggle_command(app: &mut App, query: &str) {
     }
 }
 
+/// Toggles the application mode and logs the change
+pub fn toggle_app_mode(app: &mut App, current_mode: AppMode) -> AppMode {
+    let new_mode = match current_mode {
+        AppMode::Pkm => {
+            app.log_activity("Switched to Feed Mode".to_string());
+            AppMode::Feed
+        },
+        AppMode::Feed => {
+            app.log_activity("Switched to PKM Mode".to_string());
+            AppMode::Pkm
+        },
+    };
+    
+    new_mode
+}
+
 /// Executes a command, updating the app state as needed
 pub fn execute_command(app: &mut App, command: Option<Command>) -> Option<u32> {
     let result = match command {
@@ -429,6 +463,10 @@ pub fn execute_command(app: &mut App, command: Option<Command>) -> Option<u32> {
         }
         Some(Command::Toggle(query)) => {
             execute_toggle_command(app, &query);
+            None
+        }
+        Some(Command::ToggleAppMode) => {
+            app.app_mode = toggle_app_mode(app, app.app_mode);
             None
         }
         None => {

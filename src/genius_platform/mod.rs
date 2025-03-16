@@ -5,6 +5,7 @@
 
 pub mod genius_api;
 pub mod genius_api_bridge;
+pub mod genius_keyhandler;
 
 // Re-export key types for convenience
 pub use genius_api::GeniusItem;

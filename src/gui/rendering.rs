@@ -9,6 +9,8 @@ use crate::display_container::TaskIndex;
 use crate::taskstore::{Task, TaskStatus};
 use crate::gui::keyhandler::KeyHandler;
 use crate::genius_platform::GeniusApiBridge;
+use crate::genius_platform::genius_keyhandler::GeniusKeyHandler;
+use crate::commands::AppMode;
 
 /// The primary accent color used throughout the UI
 const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(57, 255, 20);
@@ -55,6 +57,8 @@ struct GuiApp {
     input_text: String,
     /// Key handler for input processing
     key_handler: KeyHandler,
+    /// Genius Feed key handler for feed mode input processing
+    genius_key_handler: GeniusKeyHandler,
 }
 
 impl GuiApp {
@@ -63,6 +67,7 @@ impl GuiApp {
             app,
             input_text: String::new(),
             key_handler: KeyHandler::new(),
+            genius_key_handler: GeniusKeyHandler::new(),
         }
     }
     
@@ -317,7 +322,7 @@ impl GuiApp {
                 .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Help: Enter = execute | Shift+Enter = subtask | Ctrl+Enter = toggle done | Ctrl+Up/Down = expand/collapse")
+                        ui.label(egui::RichText::new("Help: Enter = execute | Shift+Enter = subtask | Ctrl+Enter = toggle done | Ctrl+Up/Down = expand/collapse | Shift+Tab = switch mode")
                             .color(ACCENT_COLOR));
                     });
                 });
@@ -330,7 +335,7 @@ impl GuiApp {
         egui::Frame::none()
             .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.vertical(|ui| {
                     // Customize the visuals to make the border always visible
                     // Store the original visuals
                     let original_inactive = ui.visuals().widgets.inactive.clone();
@@ -346,7 +351,11 @@ impl GuiApp {
                     // Use a custom text edit with a visible background
                     let text_edit = egui::TextEdit::singleline(&mut self.input_text)
                         .desired_width(f32::INFINITY) // Make it take full width
-                        .hint_text("Enter task or command...") // Add hint text
+                        .hint_text(if let AppMode::Feed = self.app.app_mode {
+                            "Enter search query for Genius Feed..."
+                        } else {
+                            "Enter task or command..."
+                        }) // Add hint text
                         .id(egui::Id::new("main_input_field")); // Use a consistent ID
                     
                     // Request focus on the text edit
@@ -392,6 +401,13 @@ impl GuiApp {
                     
                     // NOTE: Enter key handling is done in keyhandler.rs
                     // Do not handle Enter key here to avoid conflicts
+                    
+                    // Display current mode below the input field
+                    let mode_text = match self.app.app_mode {
+                        AppMode::Pkm => "PKM Mode",
+                        AppMode::Feed => "Feed Mode",
+                    };
+                    ui.label(egui::RichText::new(mode_text).small().weak());
                 });
             });
     }
@@ -406,9 +422,13 @@ impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Update key handler modifiers
         self.key_handler.update_modifiers(ctx);
+        self.genius_key_handler.update_modifiers(ctx);
         
-        // Process keyboard input
-        let input_handled = self.key_handler.handle_input(&mut self.app, ctx, &mut self.input_text);
+        // Process keyboard input based on current mode
+        let input_handled = match self.app.app_mode {
+            AppMode::Pkm => self.key_handler.handle_input(&mut self.app, ctx, &mut self.input_text),
+            AppMode::Feed => self.genius_key_handler.handle_input(&mut self.app, ctx, &mut self.input_text),
+        };
         
         // Set up the central panel with accent-colored visuals
         let mut frame = egui::Frame::default();

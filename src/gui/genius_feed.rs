@@ -5,6 +5,73 @@
 
 use eframe::egui;
 use crate::genius_platform::{GeniusItem, GeniusApiBridge};
+use crate::App;
+use std::time::{Duration, Instant};
+use std::cell::RefCell;
+
+// Thread-local cache for rate limiting API requests
+thread_local! {
+    static API_CACHE: RefCell<ApiRequestCache> = RefCell::new(ApiRequestCache::new());
+}
+
+// Cache structure to hold API request state
+struct ApiRequestCache {
+    last_api_request: Option<Instant>,
+    last_query_text: String,
+    min_request_interval: Duration,
+}
+
+impl ApiRequestCache {
+    fn new() -> Self {
+        Self {
+            last_api_request: None,
+            last_query_text: String::new(),
+            min_request_interval: Duration::from_millis(50),
+        }
+    }
+}
+
+/// Query the API if conditions are met (rate limiting and input changed)
+/// 
+/// This function checks if an API request should be made based on:
+/// 1. Input is not empty
+/// 2. Input has changed since the last query
+/// 3. Enough time has passed since the last request (rate limiting)
+pub fn maybe_query_api(app: &mut App, input_text: &str) {
+    // Skip empty input
+    if input_text.is_empty() {
+        return;
+    }
+    
+    // Use thread_local to safely access our cache
+    API_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        
+        // Skip if input hasn't changed since last query
+        if input_text == cache.last_query_text {
+            return;
+        }
+        
+        // Check if enough time has passed since the last request
+        let should_query = match cache.last_api_request {
+            Some(last_time) => {
+                let elapsed = last_time.elapsed();
+                elapsed >= cache.min_request_interval
+            },
+            None => true, // First request
+        };
+        
+        if should_query {
+            // Update the last query time and text
+            cache.last_api_request = Some(Instant::now());
+            cache.last_query_text = input_text.to_string();
+            
+            // Query the API using the global API bridge
+            let mut api_bridge = crate::genius_platform::get_api_bridge();
+            let _ = api_bridge.query_with_input(app, input_text);
+        }
+    });
+}
 
 /// Render the Genius Feed widget
 /// 

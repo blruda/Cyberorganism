@@ -9,6 +9,7 @@ mod genius_platform;
 mod gui;
 mod taskstore;
 
+use crate::commands::AppMode;
 use crate::display_container::{ActivityLog, DisplayContainerState};
 use std::fmt;
 use taskstore::{Task, load_tasks};
@@ -27,6 +28,8 @@ pub struct App {
     pub activity_log: ActivityLog,
     /// Whether to show help text
     pub show_help: bool,
+    /// Current application mode (PKM or Feed)
+    pub app_mode: AppMode,
 }
 
 impl Default for App {
@@ -46,6 +49,7 @@ impl App {
             display_container_state: DisplayContainerState::new(),
             activity_log: ActivityLog::new(),
             show_help: true,
+            app_mode: AppMode::default(),
         }
     }
 

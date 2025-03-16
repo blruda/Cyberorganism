@@ -122,8 +122,11 @@ impl GuiApp {
         let task_id = task.id;
         let mut task_to_complete = None;
         
+        // Only apply highlighting if we're in PKM mode
+        let should_highlight = is_focused && matches!(self.app.app_mode, crate::commands::AppMode::Pkm);
+        
         // Create a frame that will have the background color if focused
-        let frame = if is_focused {
+        let frame = if should_highlight {
             egui::Frame::none()
                 .fill(ACCENT_COLOR)
                 .inner_margin(egui::style::Margin::symmetric(4.0, 0.0))
@@ -144,7 +147,7 @@ impl GuiApp {
                 }
                 
                 // Render the task text with the appropriate style
-                let text = if is_focused {
+                let text = if should_highlight {
                     egui::RichText::new(task_text).color(egui::Color32::BLACK)
                 } else {
                     egui::RichText::new(task_text)
@@ -414,7 +417,8 @@ impl GuiApp {
     
     /// Render the genius feed
     fn render_genius_feed(&self, ui: &mut egui::Ui) {
-        crate::gui::genius_feed::render_genius_feed(ui, &GeniusApiBridge::global());
+        // Always show the genius feed, but interaction is only enabled in Feed mode
+        crate::gui::genius_feed::render_genius_feed(ui, &GeniusApiBridge::global(), self.app.app_mode);
     }
 }
 

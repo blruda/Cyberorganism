@@ -404,15 +404,19 @@ fn execute_toggle_command(app: &mut App, query: &str) {
 /// Toggles the application mode and logs the change
 pub fn toggle_app_mode(app: &mut App, current_mode: AppMode) -> AppMode {
     let new_mode = match current_mode {
-        AppMode::Pkm => {
-            app.log_activity("Switched to Feed Mode".to_string());
-            AppMode::Feed
-        },
-        AppMode::Feed => {
-            app.log_activity("Switched to PKM Mode".to_string());
-            AppMode::Pkm
-        },
+        AppMode::Pkm => AppMode::Feed,
+        AppMode::Feed => AppMode::Pkm,
     };
+    
+    app.app_mode = new_mode;
+    
+    // Log the mode change
+    let mode_name = match new_mode {
+        AppMode::Pkm => "PKM",
+        AppMode::Feed => "Feed",
+    };
+    
+    app.activity_log.add_message(format!("Switched to {} mode", mode_name));
     
     new_mode
 }

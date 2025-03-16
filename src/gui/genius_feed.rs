@@ -12,6 +12,7 @@ use std::cell::RefCell;
 // Thread-local cache for rate limiting API requests
 thread_local! {
     static API_CACHE: RefCell<ApiRequestCache> = RefCell::new(ApiRequestCache::new());
+    static FEED_STATE: RefCell<GeniusFeedState> = RefCell::new(GeniusFeedState::new());
 }
 
 // Cache structure to hold API request state
@@ -28,6 +29,72 @@ impl ApiRequestCache {
             last_query_text: String::new(),
             min_request_interval: Duration::from_millis(50),
         }
+    }
+}
+
+/// State for the Genius Feed
+pub struct GeniusFeedState {
+    /// Index of the currently focused item (0-based)
+    pub focused_index: Option<usize>,
+}
+
+impl GeniusFeedState {
+    fn new() -> Self {
+        Self {
+            focused_index: Some(0), // Start with the first item focused
+        }
+    }
+
+    /// Get the current focused index
+    pub fn get_focused_index() -> Option<usize> {
+        FEED_STATE.with(|state| state.borrow().focused_index)
+    }
+
+    /// Set the focused index
+    pub fn set_focused_index(index: Option<usize>) {
+        FEED_STATE.with(|state| state.borrow_mut().focused_index = index);
+    }
+
+    /// Move focus up
+    pub fn focus_previous(item_count: usize) {
+        if item_count == 0 {
+            return;
+        }
+
+        FEED_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if let Some(current) = state.focused_index {
+                if current > 0 {
+                    state.focused_index = Some(current - 1);
+                } else {
+                    // Wrap around to the last item
+                    state.focused_index = Some(item_count - 1);
+                }
+            } else {
+                state.focused_index = Some(0);
+            }
+        });
+    }
+
+    /// Move focus down
+    pub fn focus_next(item_count: usize) {
+        if item_count == 0 {
+            return;
+        }
+
+        FEED_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if let Some(current) = state.focused_index {
+                if current < item_count - 1 {
+                    state.focused_index = Some(current + 1);
+                } else {
+                    // Wrap around to the first item
+                    state.focused_index = Some(0);
+                }
+            } else {
+                state.focused_index = Some(0);
+            }
+        });
     }
 }
 
@@ -77,7 +144,10 @@ pub fn maybe_query_api(app: &mut App, input_text: &str) {
 /// 
 /// This function displays items from the Genius API as a bulleted list,
 /// sorted by relevance if available.
-pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge) {
+pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_mode: crate::commands::AppMode) {
+    // Determine if we're in feed mode for highlighting
+    let is_feed_mode = matches!(app_mode, crate::commands::AppMode::Feed);
+    
     // Create a frame with some padding and a visible border
     egui::Frame::none()
         .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
@@ -102,12 +172,32 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge) {
                     relevance_b.partial_cmp(&relevance_a).unwrap_or(std::cmp::Ordering::Equal)
                 });
                 
+                // Get the currently focused index
+                let focused_index = GeniusFeedState::get_focused_index();
+                
+                // If this is the first time showing items and we have items, ensure focus is set
+                if focused_index.is_none() && !items.is_empty() {
+                    GeniusFeedState::set_focused_index(Some(0));
+                }
+                
+                // Update the item count for navigation
+                let item_count = items.len();
+                
                 // Display each item as a bulleted list
                 egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                    for item in items {
-                        render_genius_item(ui, &item);
+                    for (idx, item) in items.iter().enumerate() {
+                        // Only highlight if we're in Feed mode
+                        let is_focused = is_feed_mode && focused_index == Some(idx);
+                        render_genius_item(ui, item, is_focused);
                     }
                 });
+                
+                // Store the item count for navigation
+                if item_count > 0 && focused_index.is_none() {
+                    GeniusFeedState::set_focused_index(Some(0));
+                } else if item_count == 0 {
+                    GeniusFeedState::set_focused_index(None);
+                }
             } else if api_bridge.is_request_in_progress() {
                 ui.label("Loading results...");
             } else {
@@ -117,23 +207,37 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge) {
 }
 
 /// Render a single Genius item
-fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem) {
-    ui.horizontal(|ui| {
-        // Extract relevance for display
-        let relevance = item.metadata.get("relevance")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-        
-        // Format relevance as percentage
-        let relevance_text = format!("({:.0}%)", relevance * 100.0);
-        
-        // Display bullet and description
-        ui.label("• ");
-        ui.label(&item.description);
-        
-        // Add flexible space to push relevance to the right
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(egui::RichText::new(relevance_text).weak());
+fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool) {
+    // Create a frame that will have the background color if focused
+    let accent_color = egui::Color32::from_rgb(57, 255, 20);
+    let frame = if is_focused {
+        egui::Frame::none()
+            .fill(accent_color)
+            .inner_margin(egui::style::Margin::symmetric(4.0, 0.0))
+    } else {
+        egui::Frame::none()
+    };
+    
+    // Use the frame to create a container with the right background
+    frame.show(ui, |ui| {
+        ui.horizontal(|ui| {
+            // Extract relevance for display
+            let relevance = item.metadata.get("relevance")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            
+            // Format relevance as percentage
+            let relevance_text = format!("({:.0}%)", relevance * 100.0);
+            
+            // Display bullet and description with appropriate color
+            let text_color = if is_focused { egui::Color32::BLACK } else { ui.visuals().text_color() };
+            ui.label(egui::RichText::new("• ").color(text_color));
+            ui.label(egui::RichText::new(&item.description).color(text_color));
+            
+            // Add flexible space to push relevance to the right
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(egui::RichText::new(relevance_text).weak().color(text_color));
+            });
         });
     });
 }

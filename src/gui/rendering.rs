@@ -333,7 +333,7 @@ impl GuiApp {
                     // Use a label with explicit wrapping to ensure text stays within bounds
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new("Help: Enter = execute | Shift+Enter = subtask | Ctrl+Enter = toggle done | Ctrl+Up/Down = expand/collapse | Ctrl+Space = switch mode")
+                            egui::RichText::new("Help: Enter = execute | Shift+Enter = subtask | Ctrl+Enter = PKM: toggle done, Feed: toggle pinned | Ctrl+Up/Down = expand/collapse | Ctrl+Space = switch mode")
                                 .color(ACCENT_COLOR)
                         )
                         .wrap(true) // Enable text wrapping

@@ -356,12 +356,27 @@ impl GeniusApiClient {
     
     /// Create a mock response for testing and development
     pub fn mock_query(&self, query: &str) -> GeniusResponse {
-        // Create dummy items with incrementing relevance
+        // Create dummy items with simple numeric IDs and static+dynamic descriptions
         let mut items = Vec::new();
+        
+        // Static descriptions for each item
+        let static_descriptions = [
+            "Implement authentication system",
+            "Create database schema",
+            "Design user interface",
+            "Write documentation",
+            "Set up CI/CD pipeline",
+            "Optimize performance",
+            "Fix security vulnerabilities",
+            "Add analytics tracking",
+        ];
+        
         for i in 1..=8 {
             let item = GeniusItem {
-                id: format!("item-{}", i),
-                description: format!("Item {} - This is a mock item for query: '{}'", i, query),
+                // Simple numeric IDs for easy debugging
+                id: i.to_string(),
+                // Combine static description with dynamic query information
+                description: format!("Item {}: {} (query: '{}')", i, static_descriptions[i-1], query),
                 metadata: {
                     let mut map = serde_json::Map::new();
                     // Relevance from 0.1 to 0.8 (incrementing by 0.1)

@@ -120,6 +120,18 @@ impl GeniusKeyHandler {
                     handled = true;
                 }
             }
+            
+            // Ctrl+Enter key to toggle pinning the currently focused item
+            if i.key_pressed(egui::Key::Enter) && self.ctrl_pressed {
+                if let Some(focused_item) = crate::gui::genius_feed::GeniusFeedState::get_focused_item() {
+                    crate::gui::genius_feed::GeniusFeedState::toggle_item_pinned(&focused_item.id);
+                    
+                    // Request focus back to the input field for the next frame
+                    app.display_container_state.request_focus_next_frame = true;
+                    
+                    handled = true;
+                }
+            }
         });
         
         handled

@@ -39,6 +39,8 @@ pub struct GeniusFeedState {
     pub focused_index: Option<usize>,
     /// Set of expanded item indices that show metadata
     pub expanded_items: HashSet<usize>,
+    /// Set of pinned item IDs that should persist across queries
+    pub pinned_items: HashSet<String>,
 }
 
 impl GeniusFeedState {
@@ -46,6 +48,7 @@ impl GeniusFeedState {
         Self {
             focused_index: Some(0), // Start with the first item focused
             expanded_items: HashSet::new(),
+            pinned_items: HashSet::new(),
         }
     }
 
@@ -74,6 +77,79 @@ impl GeniusFeedState {
                 state.expanded_items.insert(index);
             }
         });
+    }
+
+    /// Check if an item is pinned
+    pub fn is_item_pinned(item_id: &str) -> bool {
+        FEED_STATE.with(|state| state.borrow().pinned_items.contains(item_id))
+    }
+    
+    /// Toggle the pinned state of an item
+    pub fn toggle_item_pinned(item_id: &str) {
+        FEED_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if state.pinned_items.contains(item_id) {
+                state.pinned_items.remove(item_id);
+            } else {
+                state.pinned_items.insert(item_id.to_string());
+            }
+        });
+    }
+    
+    /// Get all pinned item IDs
+    pub fn get_pinned_items() -> HashSet<String> {
+        FEED_STATE.with(|state| state.borrow().pinned_items.clone())
+    }
+
+    /// Get the item at the focused index, taking into account sorting and pinning
+    pub fn get_focused_item() -> Option<crate::genius_platform::genius_api::GeniusItem> {
+        let focused_idx = Self::get_focused_index()?;
+        
+        // Store the API bridge in a variable to avoid temporary value issues
+        let api_bridge = crate::genius_platform::genius_api_bridge::GeniusApiBridge::global();
+        // Clone the response to ensure we own the data
+        let response = api_bridge.last_response()?.clone();
+        
+        // Get sorted items as they appear in the UI
+        let mut items = response.items;
+        
+        // Sort by relevance
+        items.sort_by(|a, b| {
+            let relevance_a = a.metadata.get("relevance")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            
+            let relevance_b = b.metadata.get("relevance")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            
+            relevance_b.partial_cmp(&relevance_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        // Prioritize pinned items
+        let pinned_item_ids = Self::get_pinned_items();
+        if !pinned_item_ids.is_empty() {
+            let mut pinned_items = Vec::new();
+            let mut unpinned_items = Vec::new();
+            
+            for item in items {
+                if pinned_item_ids.contains(&item.id) {
+                    pinned_items.push(item);
+                } else {
+                    unpinned_items.push(item);
+                }
+            }
+            
+            items = pinned_items;
+            items.extend(unpinned_items);
+        }
+        
+        // Return the item at the focused index if it exists
+        if focused_idx < items.len() {
+            Some(items[focused_idx].clone())
+        } else {
+            None
+        }
     }
 
     /// Move focus up
@@ -176,6 +252,9 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
         .show(ui, |ui| {
             // Check if there's any data to display
             if let Some(response) = api_bridge.last_response() {
+                // Get all pinned item IDs
+                let pinned_item_ids = GeniusFeedState::get_pinned_items();
+                
                 // Sort items by relevance if available (highest first)
                 let mut items = response.items.clone();
                 items.sort_by(|a, b| {
@@ -191,6 +270,25 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                     // Sort in descending order (highest relevance first)
                     relevance_b.partial_cmp(&relevance_a).unwrap_or(std::cmp::Ordering::Equal)
                 });
+                
+                // Prioritize pinned items by moving them to the top
+                if !pinned_item_ids.is_empty() {
+                    // Separate pinned and unpinned items
+                    let mut pinned_items = Vec::new();
+                    let mut unpinned_items = Vec::new();
+                    
+                    for item in items {
+                        if pinned_item_ids.contains(&item.id) {
+                            pinned_items.push(item);
+                        } else {
+                            unpinned_items.push(item);
+                        }
+                    }
+                    
+                    // Combine them with pinned items first
+                    items = pinned_items;
+                    items.extend(unpinned_items);
+                }
                 
                 // Get the currently focused index
                 let focused_index = GeniusFeedState::get_focused_index();
@@ -251,14 +349,30 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
     // Check if this item is expanded
     let is_expanded = GeniusFeedState::is_item_expanded(item_index);
     
+    // Check if this item is pinned
+    let is_pinned = GeniusFeedState::is_item_pinned(&item.id);
+    
     // Define colors
     let accent_color = egui::Color32::from_rgb(57, 255, 20);
-    let text_color = if is_focused { egui::Color32::BLACK } else { ui.visuals().text_color() };
+    // Gold color for pinned items (used for background)
+    let pinned_bg_color = egui::Color32::from_rgba_premultiplied(255, 215, 0, 40);
     
-    // Create a frame that will have the background color if focused
+    // Determine text color based on item state
+    let text_color = if is_focused || is_pinned {
+        egui::Color32::BLACK
+    } else {
+        ui.visuals().text_color()
+    };
+    
+    // Create a frame that will have the appropriate background color
     let frame = if is_focused {
         egui::Frame::none()
             .fill(accent_color)
+            .inner_margin(egui::style::Margin::symmetric(4.0, 0.0))
+    } else if is_pinned {
+        // For pinned items that aren't focused, use a subtle gold background
+        egui::Frame::none()
+            .fill(pinned_bg_color)
             .inner_margin(egui::style::Margin::symmetric(4.0, 0.0))
     } else {
         egui::Frame::none()
@@ -269,11 +383,18 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
         // Use the frame to create a container with the right background for the main row
         let main_row_response = frame.show(ui, |ui| {
             ui.horizontal(|ui| {
-                // Display bullet point
-                ui.label(egui::RichText::new("• ").color(text_color));
+                // Display bullet point or pin icon
+                if is_pinned {
+                    ui.label(egui::RichText::new("📌 ").color(text_color));
+                } else {
+                    ui.label(egui::RichText::new("• ").color(text_color));
+                }
                 
                 // Display the description
                 ui.label(egui::RichText::new(&item.description).color(text_color));
+                
+                // Add a small label with the item ID for debugging
+                ui.small(egui::RichText::new(format!("[ID: {}]", &item.id)).weak().color(text_color));
                 
                 // Extract relevance for display
                 let relevance = item.metadata.get("relevance")

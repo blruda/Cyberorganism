@@ -913,6 +913,7 @@ dependencies = [
  "eframe",
  "egui",
  "fuzzy-matcher",
+ "lazy_static",
  "ratatui",
  "regex",
  "serde",

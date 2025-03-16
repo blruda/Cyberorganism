@@ -5,6 +5,7 @@
 mod commands;
 mod debug;
 mod display_container;
+mod genius_platform;
 mod gui;
 mod taskstore;
 

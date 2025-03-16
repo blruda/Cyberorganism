@@ -8,6 +8,7 @@ use crate::App;
 use crate::display_container::TaskIndex;
 use crate::taskstore::{Task, TaskStatus};
 use crate::gui::keyhandler::KeyHandler;
+use crate::genius_platform::GeniusApiBridge;
 
 /// The primary accent color used throughout the UI
 const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(57, 255, 20);
@@ -394,6 +395,11 @@ impl GuiApp {
                 });
             });
     }
+    
+    /// Render the genius feed
+    fn render_genius_feed(&self, ui: &mut egui::Ui) {
+        crate::gui::genius_feed::render_genius_feed(ui, &GeniusApiBridge::global());
+    }
 }
 
 impl eframe::App for GuiApp {
@@ -424,12 +430,14 @@ impl eframe::App for GuiApp {
                 
                 // Input field at the bottom
                 self.render_input(ui);
+                
+                // Genius feed displayed underneath the input field
+                self.render_genius_feed(ui);
             });
         });
         
-        // Request a repaint if input was handled
-        if input_handled {
-            ctx.request_repaint();
-        }
+        // We track input_handled but don't call request_repaint as it causes crashes
+        // Using the variable prevents unused variable warnings
+        let _ = input_handled;
     }
 }

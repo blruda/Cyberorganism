@@ -21,6 +21,7 @@ tui-input = "0.8.0"
 # GUI dependencies
 egui = "0.26.2"
 eframe = "0.26.2"  # egui framework
+lazy_static = "1.4.0"  # For singleton pattern
 
 [dev-dependencies]
 tempfile = "3.10.0"    # Temporary file handling for tests

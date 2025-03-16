@@ -6,5 +6,6 @@
 
 mod keyhandler;
 mod rendering;
+pub mod genius_feed;
 
 pub use rendering::run_app;

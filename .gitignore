@@ -5,6 +5,8 @@ tasks.json
 debug.log
 archive/
 config.toml
+.env
+
 # Windsurf
 .windsurfrules
 

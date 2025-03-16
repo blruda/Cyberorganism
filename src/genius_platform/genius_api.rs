@@ -331,20 +331,7 @@ impl GeniusApiClient {
                     id,
                     description,
                     metadata: {
-                        let mut map = card.clone();
-                        
-                        // Add relevance if not present
-                        if !map.get("relevance").is_some() {
-                            let relevance = 1.0 - (i as f64 * 0.1);
-                            let relevance = if relevance < 0.1 { 0.1 } else { relevance };
-                            
-                            if let serde_json::Value::Object(ref mut obj) = map {
-                                obj.insert(
-                                    "relevance".to_string(),
-                                    serde_json::Value::Number(serde_json::Number::from_f64(relevance).unwrap())
-                                );
-                            }
-                        }
+                        let map = card.clone();
                         
                         map
                     },
@@ -384,15 +371,7 @@ impl GeniusApiClient {
                 id: i.to_string(),
                 // Combine static description with dynamic query information
                 description: format!("Item {}: {} (query: '{}')", i, static_descriptions[i-1], query),
-                metadata: {
-                    let mut map = serde_json::Map::new();
-                    // Relevance from 0.1 to 0.8 (incrementing by 0.1)
-                    map.insert(
-                        "relevance".to_string(), 
-                        serde_json::Value::Number(serde_json::Number::from_f64(i as f64 * 0.1).unwrap())
-                    );
-                    serde_json::Value::Object(map)
-                },
+                metadata: serde_json::json!({}),
             };
             items.push(item);
         }
@@ -518,21 +497,6 @@ pub mod utils {
     pub fn extract_descriptions(response: &GeniusResponse) -> Vec<String> {
         response.items.iter()
             .map(|item| item.description.clone())
-            .collect()
-    }
-
-    /// Filter items by a relevance threshold (if available in metadata)
-    pub fn filter_by_relevance(response: &GeniusResponse, threshold: f64) -> Vec<GeniusItem> {
-        response.items.iter()
-            .filter(|item| {
-                if let Some(relevance) = item.metadata.get("relevance") {
-                    if let Some(relevance) = relevance.as_f64() {
-                        return relevance >= threshold;
-                    }
-                }
-                false
-            })
-            .cloned()
             .collect()
     }
 }

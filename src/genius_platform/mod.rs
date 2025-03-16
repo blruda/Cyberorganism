@@ -16,6 +16,7 @@ pub use genius_api_bridge::GeniusApiBridge;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 use std::env;
+use dotenv::dotenv;
 
 // Create a global instance of GeniusApiBridge
 // This allows us to have a single instance that's shared throughout the application
@@ -44,6 +45,12 @@ pub fn get_api_bridge() -> std::sync::MutexGuard<'static, GeniusApiBridge> {
 pub fn initialize_from_env() -> bool {
     println!("[DEBUG] Initializing Genius API from environment variables");
     
+    // Load .env file if it exists
+    match dotenv() {
+        Ok(_) => println!("[DEBUG] Loaded environment variables from .env file"),
+        Err(e) => println!("[DEBUG] Could not load .env file: {}", e),
+    }
+    
     let api_key = env::var("GENIUS_API_KEY").ok();
     let org_id = env::var("GENIUS_ORGANIZATION_ID").ok();
     
@@ -51,6 +58,11 @@ pub fn initialize_from_env() -> bool {
     println!("[DEBUG] GENIUS_ORGANIZATION_ID present: {}", org_id.is_some());
     
     if let (Some(api_key), Some(org_id)) = (api_key.clone(), org_id.clone()) {
+        if api_key.trim().is_empty() || org_id.trim().is_empty() {
+            println!("[DEBUG] API key or organization ID is empty");
+            return false;
+        }
+        
         println!("[DEBUG] Configuring API bridge with API key and organization ID");
         println!("[DEBUG] Organization ID: '{}'", org_id);
         

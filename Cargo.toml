@@ -20,6 +20,7 @@ regex = "1.11.1"
 # Configuration and environment
 config = "0.13"        # Configuration management
 directories = "5.0"    # Find platform-specific directories
+dotenv = "0.15.0"      # For loading environment variables from .env files
 
 # HTTP client for API requests
 reqwest = { version = "0.11", features = ["json", "blocking"] }

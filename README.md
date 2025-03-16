@@ -33,29 +33,48 @@ The application integrates with the Genius Platform API. By default, it will use
 
 There are several ways to provide the API key:
 
-1. **In config.toml** (recommended):
+1. **Using environment variables** (current method):
+   
+   The application is currently configured to use environment variables for API authentication:
+   
+   ```bash
+   # Set these environment variables with your actual credentials
+   export GENIUS_API_KEY="your-api-key-here"
+   export GENIUS_ORGANIZATION_ID="your-organization-id-here"
+   ```
+   
+   Alternatively, you can create a `.env` file in the project root:
+   
+   ```
+   # Genius API Configuration
+   GENIUS_API_KEY=your-api-key-here
+   GENIUS_ORGANIZATION_ID=your-organization-id-here
+   ```
+   
+   The application will automatically load these variables when it starts.
+
+2. **Using config.toml** (in progress):
+   
+   Support for configuration via `config.toml` is currently in development and will be the recommended method in future releases.
+   
    ```bash
    # First, copy the example configuration file
    cp config.toml.example config.toml
    
-   # Then edit config.toml and add your API key
+   # Then edit config.toml and add your API key and organization ID
    ```
    
-   In config.toml:
+   Example `config.toml` structure (not yet implemented):
    ```toml
    [genius]
    api_key = "your-api-key-here"
+   organization_id = "your-organization-id-here"
    ```
 
-2. **Using environment variables**:
-   ```bash
-   export CYBERORGANISM_GENIUS_API_KEY="your-api-key-here"
-   ```
-
-3. **System-wide configuration**:
+3. **System-wide configuration** (planned):
    ```bash
    mkdir -p ~/.config/cyberorganism/
-   echo '[genius]\napi_key = "your-api-key-here"' > ~/.config/cyberorganism/config.toml
+   echo '[genius]\napi_key = "your-api-key-here"\norganization_id = "your-organization-id-here"' > ~/.config/cyberorganism/config.toml
    ```
 
 ### Feature Flags

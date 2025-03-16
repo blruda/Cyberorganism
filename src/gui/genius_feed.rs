@@ -172,8 +172,7 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
     // Create a frame with some padding and a visible border
     egui::Frame::none()
         .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE))
-        .fill(egui::Color32::from_rgba_premultiplied(0, 0, 50, 20))
+        .stroke(egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color))
         .show(ui, |ui| {
             // Check if there's any data to display
             if let Some(response) = api_bridge.last_response() {
@@ -300,9 +299,9 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
         let mut metadata_response = None;
         if is_expanded {
             metadata_response = Some(ui.indent("metadata", |ui| {
-                // Create a slightly indented area with a subtle background
+                // Create a slightly indented area with a subtle border
                 egui::Frame::none()
-                    .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 20))
+                    .stroke(egui::Stroke::new(0.5, ui.visuals().widgets.noninteractive.bg_stroke.color))
                     .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
                     .show(ui, |ui| {
                         // Display metadata as key-value pairs

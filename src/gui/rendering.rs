@@ -458,7 +458,10 @@ impl eframe::App for GuiApp {
                 ui.set_max_width(available_width);
                 
                 // Create a split layout for the main content and the genius feed
-                egui::TopBottomPanel::top("main_content").show_inside(ui, |ui| {
+                let panel = egui::TopBottomPanel::top("main_content")
+                    .frame(egui::Frame::none());
+                
+                panel.show_inside(ui, |ui| {
                     // Tasks area (takes most of the space)
                     self.render_tasks(ui);
                     
@@ -480,7 +483,6 @@ impl eframe::App for GuiApp {
                     ui.allocate_space(egui::Vec2::new(0.0, 10.0)); // Small spacing
                     let available_height = ui.available_height();
                     egui::Frame::none()
-                        .fill(ui.visuals().extreme_bg_color)
                         .show(ui, |ui| {
                             ui.set_min_height(available_height.max(200.0));
                             self.render_genius_feed(ui);

@@ -111,6 +111,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.display_container_state.update_display_order(&app.tasks);
     }
 
+    // Initialize the Genius API from environment variables
+    if genius_platform::initialize_from_env() {
+        println!("Genius API initialized from environment variables");
+    } else {
+        println!("Genius API not configured. Set GENIUS_API_KEY and GENIUS_ORGANIZATION_ID environment variables to enable API integration.");
+        // You could also load from a config file here as a fallback
+    }
+
     // Run the GUI application
     if let Err(e) = gui::run_app(app) {
         eprintln!("Error running application: {}", e);

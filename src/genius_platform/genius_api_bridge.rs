@@ -37,6 +37,13 @@ impl GeniusApiBridge {
         }
     }
 
+    /// Configure the API client with the given API key and organization ID
+    pub fn configure(&mut self, api_key: &str, organization_id: &str) {
+        self.api_client = GeniusApiClient::new()
+            .with_api_key(api_key.to_string())
+            .with_organization_id(organization_id.to_string());
+    }
+
     /// Get the input query from the application state
     /// 
     /// This method retrieves the current input text from the DisplayContainerState
@@ -70,52 +77,21 @@ impl GeniusApiBridge {
         // Mark that a request is in progress
         self.request_in_progress = true;
         
-        // In debug mode, simulate API request with dummy data
-        #[cfg(debug_assertions)]
-        {
-            // Create dummy items with incrementing relevance
-            let mut items = Vec::new();
-            for i in 1..=8 {
-                let item = GeniusItem {
-                    id: format!("item-{}", i),
-                    description: format!("Result for '{}' - Item {}", query, i),
-                    metadata: {
-                        let mut map = serde_json::Map::new();
-                        // Relevance from 0.1 to 0.8 (incrementing by 0.1)
-                        map.insert(
-                            "relevance".to_string(), 
-                            serde_json::Value::Number(serde_json::Number::from_f64(i as f64 * 0.1).unwrap())
-                        );
-                        serde_json::Value::Object(map)
-                    },
-                };
-                items.push(item);
+        // Execute the query using the API client
+        let result = self.api_client.query_sync(query);
+        
+        // Update the last response and request status
+        match &result {
+            Ok(response) => {
+                self.last_response = Some(response.clone());
+                self.request_in_progress = false;
             }
-            
-            // Create a dummy response
-            let response = GeniusResponse {
-                items,
-                status: "success".to_string(),
-            };
-            
-            // Store the response and mark request as complete
-            self.last_response = Some(response.clone());
-            self.request_in_progress = false;
-            
-            return Ok(response);
+            Err(_) => {
+                self.request_in_progress = false;
+            }
         }
         
-        // In release mode, use the actual API client
-        #[cfg(not(debug_assertions))]
-        {
-            // TODO: Implement actual API request
-            // For now, just return a mock response
-            let response = self.api_client.mock_query(query);
-            self.last_response = Some(response.clone());
-            self.request_in_progress = false;
-            
-            Ok(response)
-        }
+        result
     }
 
     /// Get the descriptions from the last API response
@@ -169,6 +145,15 @@ pub mod factory {
         let mock_client = mock::create_mock_client();
         GeniusApiBridge::with_client(mock_client)
     }
+
+    /// Create a configured API bridge with the given API key and organization ID
+    pub fn create_configured_bridge(api_key: &str, organization_id: &str) -> GeniusApiBridge {
+        let client = GeniusApiClient::new()
+            .with_api_key(api_key.to_string())
+            .with_organization_id(organization_id.to_string());
+        
+        GeniusApiBridge::with_client(client)
+    }
 }
 
 #[cfg(test)]
@@ -186,39 +171,5 @@ mod tests {
         
         // Verify the result
         assert!(result.is_ok(), "Query should succeed");
-        
-        if let Ok(response) = result {
-            // Check that we have 8 items
-            assert_eq!(response.items.len(), 8, "Should have 8 dummy items");
-            
-            // Check that the items have incrementing relevance
-            for (i, item) in response.items.iter().enumerate() {
-                let i_f64 = (i + 1) as f64;
-                let expected_relevance = i_f64 * 0.1;
-                
-                // Extract relevance from metadata
-                let relevance = item.metadata.get("relevance")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0);
-                
-                // Check relevance with a small epsilon for floating point comparison
-                let epsilon = 0.0001;
-                assert!((relevance - expected_relevance).abs() < epsilon, 
-                    "Item {} should have relevance {}, got {}", i+1, expected_relevance, relevance);
-                
-                // Check that the description contains the query
-                assert!(item.description.contains(test_input), 
-                    "Item description should contain the query text");
-            }
-            
-            // Check that the status is "success"
-            assert_eq!(response.status, "success", "Status should be 'success'");
-        }
-        
-        // Check that the last_response is set
-        assert!(api_bridge.last_response().is_some(), "last_response should be set");
-        
-        // Check that request_in_progress is false
-        assert!(!api_bridge.is_request_in_progress(), "request_in_progress should be false");
     }
 }

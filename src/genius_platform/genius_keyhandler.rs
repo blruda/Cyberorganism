@@ -50,9 +50,6 @@ impl GeniusKeyHandler {
         // Check if we should query the API based on input changes
         genius_feed::maybe_query_api(app, input_text);
         
-        // Use our new handle_keyboard_navigation function for arrow key navigation
-        genius_feed::handle_keyboard_navigation(&GeniusApiBridge::global(), ctx);
-        
         // Check for key presses
         ctx.input(|i| {
             // Mode switching with Ctrl+Space
@@ -85,25 +82,47 @@ impl GeniusKeyHandler {
             }
             
             // Get the number of items in the feed for navigation bounds
-            let item_count = GeniusApiBridge::global().last_response()
-                .map(|response| response.items.len())
-                .unwrap_or(0);
+            let total_items = GeniusApiBridge::global().all_items().len();
             
-            // Handle Ctrl+Up/Down for toggling expansion
-            if i.key_pressed(egui::Key::ArrowUp) && self.ctrl_pressed {
-                // Ctrl+Up toggles expansion of the currently focused item
-                if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
-                    if focused_idx < item_count {
-                        crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
-                        handled = true;
-                    }
+            // Handle Shift+Down/Up for page navigation
+            if i.key_pressed(egui::Key::ArrowDown) && self.shift_pressed {
+                println!("[DEBUG] GeniusKeyHandler: Shift+Down arrow pressed, going to next page");
+                let current_page = crate::gui::genius_feed::GeniusFeedState::get_current_page();
+                
+                // Load the next page
+                let mut api_bridge = crate::genius_platform::get_api_bridge();
+                if !api_bridge.is_request_in_progress() && api_bridge.has_more_pages() {
+                    println!("[DEBUG] GeniusKeyHandler: Loading page {}", current_page + 1);
+                    let _ = api_bridge.load_next_page();
+                    crate::gui::genius_feed::GeniusFeedState::next_page();
                 }
+                handled = true;
+            } else if i.key_pressed(egui::Key::ArrowUp) && self.shift_pressed {
+                println!("[DEBUG] GeniusKeyHandler: Shift+Up arrow pressed, going to previous page");
+                let current_page = crate::gui::genius_feed::GeniusFeedState::get_current_page();
+                
+                if current_page > 1 {
+                    println!("[DEBUG] GeniusKeyHandler: Going to page {}", current_page - 1);
+                    crate::gui::genius_feed::GeniusFeedState::previous_page();
+                }
+                handled = true;
             }
-            
-            if i.key_pressed(egui::Key::ArrowDown) && self.ctrl_pressed {
-                // Ctrl+Down toggles expansion of the currently focused item (same as Ctrl+Up)
+            // Handle regular Up/Down for item navigation
+            else if i.key_pressed(egui::Key::ArrowDown) && !self.ctrl_pressed {
+                println!("[DEBUG] GeniusKeyHandler: Down arrow pressed, total_items={}", total_items);
+                crate::gui::genius_feed::GeniusFeedState::focus_next(total_items);
+                handled = true;
+            } else if i.key_pressed(egui::Key::ArrowUp) && !self.ctrl_pressed {
+                println!("[DEBUG] GeniusKeyHandler: Up arrow pressed, total_items={}", total_items);
+                crate::gui::genius_feed::GeniusFeedState::focus_previous(total_items);
+                handled = true;
+            }
+            // Handle Ctrl+Up/Down for toggling expansion
+            else if (i.key_pressed(egui::Key::ArrowUp) || i.key_pressed(egui::Key::ArrowDown)) && self.ctrl_pressed {
+                // Ctrl+Up/Down toggles expansion of the currently focused item
                 if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
-                    if focused_idx < item_count {
+                    if focused_idx < total_items {
+                        println!("[DEBUG] GeniusKeyHandler: Ctrl+Arrow pressed, toggling expansion for item {}", focused_idx);
                         crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
                         handled = true;
                     }

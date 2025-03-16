@@ -216,11 +216,13 @@ impl GeniusFeedState {
         });
     }
 
+    #[allow(dead_code)]
     /// Set the flag to load more items
     pub fn set_should_load_more(should_load: bool) {
         FEED_STATE.with(|state| state.borrow_mut().should_load_more = should_load);
     }
 
+    #[allow(dead_code)]
     /// Check if more items should be loaded
     pub fn should_load_more() -> bool {
         FEED_STATE.with(|state| state.borrow().should_load_more)
@@ -372,13 +374,13 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                 
                 // Add debugging information at the top
                 ui.horizontal(|ui| {
-                    ui.label(format!("Page: {} | Items on page: {} | Total Items: {} | Focused: {:?}", 
-                        current_page, item_count, total_items, focused_index));
+                    ui.label(format!("Page: {} | Items on page: {} | Total Items: {}", 
+                        current_page, item_count, total_items));
                 });
                 
                 // Add page navigation instructions
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Navigation: ↑/↓ to move focus, Shift+↑/↓ to change page").small().weak());
+                    ui.label(egui::RichText::new("Navigation: Up/Down to move focus, Shift+Up/Down to change page").small().weak()); // TODO: Figure out why unicode arrows aren't rendering on my machine
                 });
                 
                 ui.add_space(4.0);
@@ -559,52 +561,6 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
             main_row_response
         }
     }).response
-}
-
-/// Handle keyboard navigation for the Genius Feed
-/// 
-/// This function should be called from the main update loop to handle keyboard navigation
-/// for the Genius Feed. It uses the total item count from the API bridge, not just the
-/// currently visible items.
-pub fn handle_keyboard_navigation(api_bridge: &GeniusApiBridge, ctx: &egui::Context) {
-    // Get the total number of items from the API bridge
-    let total_items = api_bridge.all_items().len();
-    
-    // Check if we need to handle keyboard input for navigation
-    ctx.input(|input| {
-        // Check for shift key
-        let shift_pressed = input.modifiers.shift;
-        
-        // Handle page navigation with Shift+Down/Up
-        if shift_pressed && input.key_pressed(egui::Key::ArrowDown) {
-            println!("[DEBUG] handle_keyboard_navigation: Shift+Down arrow pressed, going to next page");
-            let current_page = GeniusFeedState::get_current_page();
-            
-            // Load the next page
-            let mut api_bridge = crate::genius_platform::get_api_bridge();
-            if !api_bridge.is_request_in_progress() && api_bridge.has_more_pages() {
-                println!("[DEBUG] handle_keyboard_navigation: Loading page {}", current_page + 1);
-                let _ = api_bridge.load_next_page();
-                GeniusFeedState::next_page();
-            }
-        } else if shift_pressed && input.key_pressed(egui::Key::ArrowUp) {
-            println!("[DEBUG] handle_keyboard_navigation: Shift+Up arrow pressed, going to previous page");
-            let current_page = GeniusFeedState::get_current_page();
-            
-            if current_page > 1 {
-                println!("[DEBUG] handle_keyboard_navigation: Going to page {}", current_page - 1);
-                GeniusFeedState::previous_page();
-            }
-        } 
-        // Regular item navigation with Up/Down
-        else if input.key_pressed(egui::Key::ArrowDown) {
-            println!("[DEBUG] handle_keyboard_navigation: Down arrow pressed, total_items={}", total_items);
-            GeniusFeedState::focus_next(total_items);
-        } else if input.key_pressed(egui::Key::ArrowUp) {
-            println!("[DEBUG] handle_keyboard_navigation: Up arrow pressed, total_items={}", total_items);
-            GeniusFeedState::focus_previous(total_items);
-        }
-    });
 }
 
 #[cfg(test)]

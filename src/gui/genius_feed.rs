@@ -213,9 +213,23 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                             let is_focused = is_feed_mode && focused_index == Some(idx);
                             
                             // We need to wrap this in a container to capture item-specific interactions
-                            let _item_response = ui.group(|ui| {
-                                render_genius_item(ui, item, is_focused, idx);
-                            });
+                            let item_response = render_genius_item(ui, item, is_focused, idx);
+                            
+                            // If this item is focused, scroll to make it visible
+                            if is_focused {
+                                // Only scroll if the item is not fully visible in the scroll area
+                                let item_rect = item_response.rect;
+                                let scroll_area_rect = ui.clip_rect();
+                                
+                                // Check if the item is not fully visible
+                                let is_partially_out_of_view = 
+                                    item_rect.top() < scroll_area_rect.top() || 
+                                    item_rect.bottom() > scroll_area_rect.bottom();
+                                
+                                if is_partially_out_of_view {
+                                    item_response.scroll_to_me(Some(egui::Align::Center));
+                                }
+                            }
                         }
                     });
                 
@@ -234,7 +248,7 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
 }
 
 /// Render a single Genius item
-fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, item_index: usize) {
+fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, item_index: usize) -> egui::Response {
     // Check if this item is expanded
     let is_expanded = GeniusFeedState::is_item_expanded(item_index);
     
@@ -251,10 +265,10 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
         egui::Frame::none()
     };
     
-    // Use a vertical layout for the entire item
+    // Use a vertical layout for the entire item and collect the response
     ui.vertical(|ui| {
         // Use the frame to create a container with the right background for the main row
-        frame.show(ui, |ui| {
+        let main_row_response = frame.show(ui, |ui| {
             ui.horizontal(|ui| {
                 // Display bullet point
                 ui.label(egui::RichText::new("• ").color(text_color));
@@ -279,12 +293,13 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
                     let expand_indicator = if is_expanded { "" } else { "▶" };
                     ui.label(egui::RichText::new(expand_indicator).weak().color(text_color));
                 });
-            });
-        });
+            }).response
+        }).response;
         
         // If expanded, show metadata
+        let mut metadata_response = None;
         if is_expanded {
-            ui.indent("metadata", |ui| {
+            metadata_response = Some(ui.indent("metadata", |ui| {
                 // Create a slightly indented area with a subtle background
                 egui::Frame::none()
                     .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 20))
@@ -307,10 +322,17 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
                             ui.label(egui::RichText::new("ID:").strong());
                             ui.label(&item.id);
                         });
-                    });
-            });
+                    }).response
+            }).response);
         }
-    });
+        
+        // Return the main row response, or if expanded, combine it with the metadata response
+        if let Some(meta_resp) = metadata_response {
+            main_row_response.union(meta_resp)
+        } else {
+            main_row_response
+        }
+    }).response
 }
 
 #[cfg(test)]

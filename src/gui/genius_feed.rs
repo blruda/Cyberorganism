@@ -43,6 +43,8 @@ pub struct GeniusFeedState {
     pub should_load_more: bool,
     /// Set of pinned item IDs that should persist across queries
     pub pinned_items: HashSet<String>,
+    /// Current page being displayed (1-based)
+    pub current_page: usize,
 }
 
 impl GeniusFeedState {
@@ -52,6 +54,7 @@ impl GeniusFeedState {
             expanded_items: HashSet::new(),
             should_load_more: false,
             pinned_items: HashSet::new(),
+            current_page: 1,
         }
     }
 
@@ -222,6 +225,38 @@ impl GeniusFeedState {
     pub fn should_load_more() -> bool {
         FEED_STATE.with(|state| state.borrow().should_load_more)
     }
+
+    /// Get the current page
+    pub fn get_current_page() -> usize {
+        FEED_STATE.with(|state| state.borrow().current_page)
+    }
+
+    /// Set the current page
+    pub fn set_current_page(page: usize) {
+        FEED_STATE.with(|state| state.borrow_mut().current_page = page);
+    }
+
+    /// Go to the next page
+    pub fn next_page() {
+        FEED_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            state.current_page += 1;
+            // Reset focus to the first item on the new page
+            state.focused_index = Some(0);
+        });
+    }
+
+    /// Go to the previous page
+    pub fn previous_page() {
+        FEED_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if state.current_page > 1 {
+                state.current_page -= 1;
+                // Reset focus to the first item on the new page
+                state.focused_index = Some(0);
+            }
+        });
+    }
 }
 
 /// Query the API if conditions are met (rate limiting and input changed)
@@ -233,45 +268,6 @@ impl GeniusFeedState {
 pub fn maybe_query_api(app: &mut App, input_text: &str) {
     // Skip empty input
     if input_text.is_empty() {
-        return;
-    }
-    
-    // Check if we should load more items
-    if GeniusFeedState::should_load_more() {
-        println!("[DEBUG] maybe_query_api: should_load_more flag is true, loading next page");
-        
-        // Reset the flag
-        GeniusFeedState::set_should_load_more(false);
-        
-        // Store the current focused index and item count before loading more
-        let current_focused = GeniusFeedState::get_focused_index();
-        
-        // Load more items
-        let mut api_bridge = crate::genius_platform::get_api_bridge();
-        if !api_bridge.is_request_in_progress() && api_bridge.has_more_pages() {
-            println!("[DEBUG] maybe_query_api: Calling load_next_page()");
-            let result = api_bridge.load_next_page();
-            
-            // If we successfully loaded more items and we were at the last item,
-            // update the focused index to the next item
-            if result.is_ok() {
-                if let Some(focused_idx) = current_focused {
-                    let new_item_count = api_bridge.all_items().len();
-                    println!("[DEBUG] maybe_query_api: Loaded more items, new count: {}", new_item_count);
-                    
-                    // If we were at the last item, move to the next one
-                    if focused_idx == new_item_count - result.unwrap().items.len() - 1 {
-                        println!("[DEBUG] maybe_query_api: Moving focus to next item: {}", focused_idx + 1);
-                        GeniusFeedState::set_focused_index(Some(focused_idx + 1));
-                    }
-                }
-            }
-        } else {
-            println!("[DEBUG] maybe_query_api: Skipping load_next_page() - request in progress: {}, has more pages: {}", 
-                api_bridge.is_request_in_progress(), api_bridge.has_more_pages());
-        }
-        
-        // Return early to avoid making a new query
         return;
     }
     
@@ -298,6 +294,9 @@ pub fn maybe_query_api(app: &mut App, input_text: &str) {
             cache.last_api_request = Some(Instant::now());
             cache.last_query_text = input_text.to_string();
             
+            // Reset to page 1 when the query changes
+            GeniusFeedState::set_current_page(1);
+            
             // Query the API using the global API bridge
             let mut api_bridge = crate::genius_platform::get_api_bridge();
             let _ = api_bridge.query_with_input(app, input_text);
@@ -319,10 +318,6 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
         .stroke(egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color))
         .show(ui, |ui| {
             // Check if there's any data to display
-///<<<<<<< blruda-3
-            let items = api_bridge.all_items();
-            if !items.is_empty() {
-///====== Git merge conflict here, but why?
             if let Some(response) = api_bridge.last_response() {
                 // Get all pinned item IDs
                 let pinned_item_ids = GeniusFeedState::get_pinned_items();
@@ -362,7 +357,6 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                     items.extend(unpinned_items);
                 }
                 
-///>>>>>>> master
                 // Get the currently focused index
                 let focused_index = GeniusFeedState::get_focused_index();
                 
@@ -373,25 +367,30 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                 
                 // Update the item count for navigation
                 let item_count = items.len();
+                let current_page = GeniusFeedState::get_current_page();
+                let total_items = api_bridge.all_items().len();
                 
                 // Add debugging information at the top
                 ui.horizontal(|ui| {
-                    ui.label(format!("Page: {} | Total Items: {} | Focused: {:?}", 
-                        api_bridge.current_page(), item_count, focused_index));
+                    ui.label(format!("Page: {} | Items on page: {} | Total Items: {} | Focused: {:?}", 
+                        current_page, item_count, total_items, focused_index));
                 });
+                
+                // Add page navigation instructions
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Navigation: ↑/↓ to move focus, Shift+↑/↓ to change page").small().weak());
+                });
+                
                 ui.add_space(4.0);
                 
-                // Check if we need to load more items when the focused item is at the end of the list
+                // Check if we need to adjust the focused index
                 if let Some(focused_idx) = focused_index {
                     // Make sure the focused index is valid
-                    if focused_idx >= item_count {
+                    if focused_idx >= item_count && item_count > 0 {
                         println!("[DEBUG] render_genius_feed: Focused index {} is out of bounds (item_count: {}), adjusting", 
                             focused_idx, item_count);
                         // Adjust the focused index to be within bounds
                         GeniusFeedState::set_focused_index(Some(item_count - 1));
-                    } else if focused_idx >= item_count - 1 && !api_bridge.is_request_in_progress() && api_bridge.has_more_pages() {
-                        println!("[DEBUG] render_genius_feed: Focused item is at the end of the list, setting should_load_more flag");
-                        GeniusFeedState::set_should_load_more(true);
                     }
                 }
                 
@@ -399,12 +398,15 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
+                        // Calculate the global item index for numbering (for debugging)
+                        let start_index = (current_page - 1) * 10; // Assuming 10 items per page
+                        
                         for (idx, item) in items.iter().enumerate() {
                             // Only highlight if we're in Feed mode
                             let is_focused = is_feed_mode && focused_index == Some(idx);
                             
                             // We need to wrap this in a container to capture item-specific interactions
-                            let item_response = render_genius_item(ui, item, is_focused, idx);
+                            let item_response = render_genius_item(ui, item, is_focused, start_index + idx);
                             
                             // If this item is focused, scroll to make it visible
                             if is_focused {
@@ -420,14 +422,6 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                                 if is_partially_out_of_view {
                                     item_response.scroll_to_me(Some(egui::Align::Center));
                                 }
-                                
-                                // Check if we're near the end of the list and should load more
-                                // We consider "near the end" to be the second-to-last item or later
-                                if idx >= item_count - 2 && !api_bridge.is_request_in_progress() && api_bridge.has_more_pages() {
-                                    // Set the flag to load more items instead of directly loading them
-                                    println!("[DEBUG] Setting should_load_more flag to true (idx: {}, item_count: {})", idx, item_count);
-                                    GeniusFeedState::set_should_load_more(true);
-                                }
                             }
                         }
                         
@@ -436,7 +430,7 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 ui.spinner();
-                                ui.label("Loading more results...");
+                                ui.label("Loading results...");
                             });
                         }
                     });
@@ -494,20 +488,16 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
         // Use the frame to create a container with the right background for the main row
         let main_row_response = frame.show(ui, |ui| {
             ui.horizontal(|ui| {
-                // Display item number and bullet point - use global sequential numbering
-                ui.label(egui::RichText::new(format!("{}• ", item_index + 1)).color(text_color));
-                // Display bullet point or pin icon
+                // Display item number for debugging
+                ui.label(egui::RichText::new(format!("{}. ", item_index + 1)).color(text_color));
+                
+                // Display pin icon if pinned
                 if is_pinned {
                     ui.label(egui::RichText::new("📌 ").color(text_color));
-                } else {
-                    ui.label(egui::RichText::new("• ").color(text_color));
                 }
                 
                 // Display the description
                 ui.label(egui::RichText::new(&item.description).color(text_color));
-                
-                // Add a small label with the item ID for debugging
-                ui.small(egui::RichText::new(format!("[ID: {}]", &item.id)).weak().color(text_color));
                 
                 // Extract relevance for display
                 let relevance = item.metadata.get("relevance")
@@ -519,11 +509,14 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, it
                 
                 // Add flexible space to push relevance to the right
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Add a small label with the item ID for debugging
+                    ui.small(egui::RichText::new(format!("[ID: {}]", &item.id)).weak().color(text_color));
+                    
+                    // Add relevance percentage
                     ui.label(egui::RichText::new(relevance_text).weak().color(text_color));
                     
                     // Add a small indicator for expanded state
-                    // TODO: Fix down arrow icon not rendering correctly in egui
-                    let expand_indicator = if is_expanded { "" } else { "▶" };
+                    let expand_indicator = if is_expanded { "▼" } else { "▶" };
                     ui.label(egui::RichText::new(expand_indicator).weak().color(text_color));
                 });
             }).response
@@ -579,8 +572,32 @@ pub fn handle_keyboard_navigation(api_bridge: &GeniusApiBridge, ctx: &egui::Cont
     
     // Check if we need to handle keyboard input for navigation
     ctx.input(|input| {
-        // Handle up/down arrow keys
-        if input.key_pressed(egui::Key::ArrowDown) {
+        // Check for shift key
+        let shift_pressed = input.modifiers.shift;
+        
+        // Handle page navigation with Shift+Down/Up
+        if shift_pressed && input.key_pressed(egui::Key::ArrowDown) {
+            println!("[DEBUG] handle_keyboard_navigation: Shift+Down arrow pressed, going to next page");
+            let current_page = GeniusFeedState::get_current_page();
+            
+            // Load the next page
+            let mut api_bridge = crate::genius_platform::get_api_bridge();
+            if !api_bridge.is_request_in_progress() && api_bridge.has_more_pages() {
+                println!("[DEBUG] handle_keyboard_navigation: Loading page {}", current_page + 1);
+                let _ = api_bridge.load_next_page();
+                GeniusFeedState::next_page();
+            }
+        } else if shift_pressed && input.key_pressed(egui::Key::ArrowUp) {
+            println!("[DEBUG] handle_keyboard_navigation: Shift+Up arrow pressed, going to previous page");
+            let current_page = GeniusFeedState::get_current_page();
+            
+            if current_page > 1 {
+                println!("[DEBUG] handle_keyboard_navigation: Going to page {}", current_page - 1);
+                GeniusFeedState::previous_page();
+            }
+        } 
+        // Regular item navigation with Up/Down
+        else if input.key_pressed(egui::Key::ArrowDown) {
             println!("[DEBUG] handle_keyboard_navigation: Down arrow pressed, total_items={}", total_items);
             GeniusFeedState::focus_next(total_items);
         } else if input.key_pressed(egui::Key::ArrowUp) {

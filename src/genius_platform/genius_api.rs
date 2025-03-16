@@ -150,8 +150,8 @@ impl GeniusApiClient {
         )
     }
 
-    /// Query the API synchronously
-    pub fn query_sync(&self, input: &str) -> Result<GeniusResponse, GeniusApiError> {
+    /// Query the API synchronously with a specific page number
+    pub fn query_sync_with_page(&self, input: &str, page: usize) -> Result<GeniusResponse, GeniusApiError> {
         // When mock-api feature is explicitly enabled, always use mock data
         #[cfg(feature = "mock-api")]
         {
@@ -177,7 +177,7 @@ impl GeniusApiClient {
             let server_url = self.get_server_url();
             
             println!("[DEBUG] Sending API request to: {}", server_url);
-            println!("[DEBUG] Query text: '{}'", input);
+            println!("[DEBUG] Query text: '{}' (page {})", input, page);
             
             // Create the request client with timeout
             let client = match reqwest::blocking::Client::builder()
@@ -193,7 +193,7 @@ impl GeniusApiClient {
             // Prepare the request body based on the genius-hackathon-skeleton implementation
             let request_body = serde_json::json!({
                 "search_prompt": input,
-                "page": 1,
+                "page": page,
                 "batch_count": 10
             });
             
@@ -299,7 +299,14 @@ impl GeniusApiClient {
             })
         }
     }
-    
+
+    /// Query the API synchronously (page 1)
+    /// 
+    /// This is a wrapper around query_sync_with_page for backward compatibility
+    pub fn query_sync(&self, input: &str) -> Result<GeniusResponse, GeniusApiError> {
+        self.query_sync_with_page(input, 1)
+    }
+
     /// Convert cards from the API response to GeniusItems
     fn convert_cards_to_items(&self, cards: &serde_json::Value) -> Result<Vec<GeniusItem>, GeniusApiError> {
         let mut items = Vec::new();

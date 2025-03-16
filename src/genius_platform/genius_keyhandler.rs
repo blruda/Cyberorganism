@@ -50,6 +50,9 @@ impl GeniusKeyHandler {
         // Check if we should query the API based on input changes
         genius_feed::maybe_query_api(app, input_text);
         
+        // Use our new handle_keyboard_navigation function for arrow key navigation
+        genius_feed::handle_keyboard_navigation(&GeniusApiBridge::global(), ctx);
+        
         // Check for key presses
         ctx.input(|i| {
             // Mode switching with Ctrl+Space
@@ -82,42 +85,26 @@ impl GeniusKeyHandler {
             }
             
             // Get the number of items in the feed for navigation bounds
-            let item_count = if let Some(response) = GeniusApiBridge::global().last_response() {
-                response.items.len()
-            } else {
-                0
-            };
+            let item_count = GeniusApiBridge::global().all_items().len();
             
-            // Navigation with arrow keys
-            if i.key_pressed(egui::Key::ArrowUp) {
-                if self.ctrl_pressed {
-                    // Ctrl+Up toggles expansion of the currently focused item
-                    if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
-                        if focused_idx < item_count {
-                            crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
-                            handled = true;
-                        }
+            // Handle Ctrl+Up/Down for toggling expansion
+            if i.key_pressed(egui::Key::ArrowUp) && self.ctrl_pressed {
+                // Ctrl+Up toggles expansion of the currently focused item
+                if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
+                    if focused_idx < item_count {
+                        crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
+                        handled = true;
                     }
-                } else {
-                    // Regular Up arrow navigates to previous item
-                    crate::gui::genius_feed::GeniusFeedState::focus_previous(item_count);
-                    handled = true;
                 }
             }
             
-            if i.key_pressed(egui::Key::ArrowDown) {
-                if self.ctrl_pressed {
-                    // Ctrl+Down toggles expansion of the currently focused item (same as Ctrl+Up)
-                    if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
-                        if focused_idx < item_count {
-                            crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
-                            handled = true;
-                        }
+            if i.key_pressed(egui::Key::ArrowDown) && self.ctrl_pressed {
+                // Ctrl+Down toggles expansion of the currently focused item (same as Ctrl+Up)
+                if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
+                    if focused_idx < item_count {
+                        crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
+                        handled = true;
                     }
-                } else {
-                    // Regular Down arrow navigates to next item
-                    crate::gui::genius_feed::GeniusFeedState::focus_next(item_count);
-                    handled = true;
                 }
             }
         });

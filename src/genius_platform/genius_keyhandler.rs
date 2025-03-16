@@ -85,7 +85,9 @@ impl GeniusKeyHandler {
             }
             
             // Get the number of items in the feed for navigation bounds
-            let item_count = GeniusApiBridge::global().all_items().len();
+            let item_count = GeniusApiBridge::global().last_response()
+                .map(|response| response.items.len())
+                .unwrap_or(0);
             
             // Handle Ctrl+Up/Down for toggling expansion
             if i.key_pressed(egui::Key::ArrowUp) && self.ctrl_pressed {

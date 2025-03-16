@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use super::genius_api::{GeniusApiClient, GeniusApiError, GeniusResponse};
+use super::genius_api::{GeniusApiClient, GeniusApiError, GeniusResponse, GeniusItem};
 use crate::App;
-use std::time::Duration;
+use serde_json;
 
 /// Bridge between the application UI and the Genius API
 /// 
@@ -92,22 +92,11 @@ impl GeniusApiBridge {
         }
     }
 
-    /// Configure the API client with the given settings
-    pub fn configure(&mut self, base_url: String, api_key: Option<String>, timeout_secs: u64) {
-        self.api_client = GeniusApiClient::with_config(
-            base_url,
-            api_key,
-            Duration::from_secs(timeout_secs),
-        );
-    }
-
-    /// Set the API key for the client
-    pub fn set_api_key(&mut self, api_key: String) {
-        self.api_client = GeniusApiClient::with_config(
-            self.api_client.base_url().to_string(),
-            Some(api_key),
-            self.api_client.timeout(),
-        );
+    /// Configure the API client with the given API key and organization ID
+    pub fn configure(&mut self, api_key: &str, organization_id: &str) {
+        self.api_client = GeniusApiClient::new()
+            .with_api_key(api_key.to_string())
+            .with_organization_id(organization_id.to_string());
     }
 
     /// Get the input query from the application state
@@ -143,16 +132,20 @@ impl GeniusApiBridge {
         // Mark that a request is in progress
         self.request_in_progress = true;
         
+        println!("[DEBUG] GeniusApiBridge: Executing query: '{}'", query);
+        
         // Execute the query using the API client
         let result = self.api_client.query_sync(query);
         
-        // Update state based on the result
+        // Update the last response and request status
         match &result {
             Ok(response) => {
+                println!("[DEBUG] GeniusApiBridge: Query successful, received {} items", response.items.len());
                 self.last_response = Some(response.clone());
                 self.request_in_progress = false;
-            },
-            Err(_) => {
+            }
+            Err(e) => {
+                println!("[DEBUG] GeniusApiBridge: Query failed: {}", e);
                 self.request_in_progress = false;
             }
         }
@@ -210,6 +203,15 @@ pub mod factory {
     pub fn create_mock_bridge() -> GeniusApiBridge {
         let mock_client = mock::create_mock_client();
         GeniusApiBridge::with_client(mock_client)
+    }
+
+    /// Create a configured API bridge with the given API key and organization ID
+    pub fn create_configured_bridge(api_key: &str, organization_id: &str) -> GeniusApiBridge {
+        let client = GeniusApiClient::new()
+            .with_api_key(api_key.to_string())
+            .with_organization_id(organization_id.to_string());
+        
+        GeniusApiBridge::with_client(client)
     }
 }
 

@@ -95,7 +95,7 @@ impl GeniusApiClient {
     /// Create a new API client with default settings
     pub fn new() -> Self {
         Self {
-            base_url: "https://api.genius.com".to_string(),
+            base_url: "https://app.productgenius.io".to_string(),
             api_key: None,
             timeout: Duration::from_secs(10),
             organization_id: String::new(),
@@ -192,22 +192,37 @@ impl GeniusApiClient {
             
             // Prepare the request body based on the genius-hackathon-skeleton implementation
             let request_body = serde_json::json!({
-                "text": input,
+                "search_prompt": input,
                 "page": 1,
                 "batch_count": 10
             });
             
-            println!("[DEBUG] Request body: {}", serde_json::to_string_pretty(&request_body).unwrap_or_default());
+            // Comment out detailed request body logging
+            // println!("[DEBUG] Request body: {}", serde_json::to_string_pretty(&request_body).unwrap_or_default());
+            
+            // Debug the full request details - commented out for reduced output
+            let auth_header = format!("Bearer {}", api_key);
+            // println!("[DEBUG] Full request details:");
+            // println!("[DEBUG] URL: {}", server_url);
+            // println!("[DEBUG] Authorization header: {}", auth_header);
+            // println!("[DEBUG] Content-Type: application/json");
             
             // Execute the request
             let response = match client
                 .post(&server_url)
-                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Authorization", auth_header)
                 .header("Content-Type", "application/json")
                 .json(&request_body)
                 .send() {
                     Ok(resp) => {
                         println!("[DEBUG] Received response with status: {}", resp.status());
+                        
+                        // Comment out detailed response headers logging
+                        // println!("[DEBUG] Response headers:");
+                        // for (name, value) in resp.headers() {
+                        //     println!("[DEBUG]   {}: {}", name, value.to_str().unwrap_or("(invalid header value)"));
+                        // }
+                        
                         resp
                     },
                     Err(e) => {
@@ -220,13 +235,25 @@ impl GeniusApiClient {
             if !response.status().is_success() {
                 let error_msg = format!("API returned error status: {}", response.status());
                 println!("[DEBUG] {}", error_msg);
-                return Err(GeniusApiError::ApiError(error_msg));
+                
+                // Try to get the response body for more error details
+                match response.text() {
+                    Ok(error_body) => {
+                        // Comment out detailed error body logging
+                        // println!("[DEBUG] Error response body: {}", error_body);
+                        return Err(GeniusApiError::ApiError(format!("{}: {}", error_msg, error_body)));
+                    },
+                    Err(_) => {
+                        return Err(GeniusApiError::ApiError(error_msg));
+                    }
+                }
             }
             
             // Parse the response text first
             let text = match response.text() {
                 Ok(text) => {
-                    println!("[DEBUG] Response text: {}", text);
+                    // Comment out full response text logging
+                    // println!("[DEBUG] Response text: {}", text);
                     text
                 },
                 Err(e) => {
@@ -279,8 +306,9 @@ impl GeniusApiClient {
         
         if let Some(cards_array) = cards.as_array() {
             for (i, card) in cards_array.iter().enumerate() {
-                // Extract the text or use a default
-                let description = card.get("text")
+                // Extract the text from product.body or use a default
+                let description = card.get("product")
+                    .and_then(|product| product.get("body"))
                     .and_then(|v| v.as_str())
                     .unwrap_or(&format!("Item {}", i+1))
                     .to_string();
@@ -385,7 +413,7 @@ impl GeniusApiClient {
             
             // Prepare the request body based on the genius-hackathon-skeleton implementation
             let request_body = serde_json::json!({
-                "text": input,
+                "search_prompt": input,
                 "page": 1,
                 "batch_count": 10
             });

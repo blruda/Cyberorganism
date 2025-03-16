@@ -90,13 +90,35 @@ impl GeniusKeyHandler {
             
             // Navigation with arrow keys
             if i.key_pressed(egui::Key::ArrowUp) {
-                genius_feed::GeniusFeedState::focus_previous(item_count);
-                handled = true;
+                if self.ctrl_pressed {
+                    // Ctrl+Up toggles expansion of the currently focused item
+                    if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
+                        if focused_idx < item_count {
+                            crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
+                            handled = true;
+                        }
+                    }
+                } else {
+                    // Regular Up arrow navigates to previous item
+                    crate::gui::genius_feed::GeniusFeedState::focus_previous(item_count);
+                    handled = true;
+                }
             }
             
             if i.key_pressed(egui::Key::ArrowDown) {
-                genius_feed::GeniusFeedState::focus_next(item_count);
-                handled = true;
+                if self.ctrl_pressed {
+                    // Ctrl+Down toggles expansion of the currently focused item (same as Ctrl+Up)
+                    if let Some(focused_idx) = crate::gui::genius_feed::GeniusFeedState::get_focused_index() {
+                        if focused_idx < item_count {
+                            crate::gui::genius_feed::GeniusFeedState::toggle_item_expansion(focused_idx);
+                            handled = true;
+                        }
+                    }
+                } else {
+                    // Regular Down arrow navigates to next item
+                    crate::gui::genius_feed::GeniusFeedState::focus_next(item_count);
+                    handled = true;
+                }
             }
         });
         

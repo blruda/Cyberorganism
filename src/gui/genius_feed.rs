@@ -8,6 +8,7 @@ use crate::genius_platform::{GeniusItem, GeniusApiBridge};
 use crate::App;
 use std::time::{Duration, Instant};
 use std::cell::RefCell;
+use std::collections::HashSet;
 
 // Thread-local cache for rate limiting API requests
 thread_local! {
@@ -36,12 +37,15 @@ impl ApiRequestCache {
 pub struct GeniusFeedState {
     /// Index of the currently focused item (0-based)
     pub focused_index: Option<usize>,
+    /// Set of expanded item indices that show metadata
+    pub expanded_items: HashSet<usize>,
 }
 
 impl GeniusFeedState {
     fn new() -> Self {
         Self {
             focused_index: Some(0), // Start with the first item focused
+            expanded_items: HashSet::new(),
         }
     }
 
@@ -53,6 +57,23 @@ impl GeniusFeedState {
     /// Set the focused index
     pub fn set_focused_index(index: Option<usize>) {
         FEED_STATE.with(|state| state.borrow_mut().focused_index = index);
+    }
+
+    /// Check if an item is expanded
+    pub fn is_item_expanded(index: usize) -> bool {
+        FEED_STATE.with(|state| state.borrow().expanded_items.contains(&index))
+    }
+
+    /// Toggle the expanded state of an item
+    pub fn toggle_item_expansion(index: usize) {
+        FEED_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if state.expanded_items.contains(&index) {
+                state.expanded_items.remove(&index);
+            } else {
+                state.expanded_items.insert(index);
+            }
+        });
     }
 
     /// Move focus up
@@ -184,13 +205,19 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
                 let item_count = items.len();
                 
                 // Display each item as a bulleted list
-                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                    for (idx, item) in items.iter().enumerate() {
-                        // Only highlight if we're in Feed mode
-                        let is_focused = is_feed_mode && focused_index == Some(idx);
-                        render_genius_item(ui, item, is_focused);
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for (idx, item) in items.iter().enumerate() {
+                            // Only highlight if we're in Feed mode
+                            let is_focused = is_feed_mode && focused_index == Some(idx);
+                            
+                            // We need to wrap this in a container to capture item-specific interactions
+                            let _item_response = ui.group(|ui| {
+                                render_genius_item(ui, item, is_focused, idx);
+                            });
+                        }
+                    });
                 
                 // Store the item count for navigation
                 if item_count > 0 && focused_index.is_none() {
@@ -207,9 +234,15 @@ pub fn render_genius_feed(ui: &mut egui::Ui, api_bridge: &GeniusApiBridge, app_m
 }
 
 /// Render a single Genius item
-fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool) {
-    // Create a frame that will have the background color if focused
+fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool, item_index: usize) {
+    // Check if this item is expanded
+    let is_expanded = GeniusFeedState::is_item_expanded(item_index);
+    
+    // Define colors
     let accent_color = egui::Color32::from_rgb(57, 255, 20);
+    let text_color = if is_focused { egui::Color32::BLACK } else { ui.visuals().text_color() };
+    
+    // Create a frame that will have the background color if focused
     let frame = if is_focused {
         egui::Frame::none()
             .fill(accent_color)
@@ -218,27 +251,65 @@ fn render_genius_item(ui: &mut egui::Ui, item: &GeniusItem, is_focused: bool) {
         egui::Frame::none()
     };
     
-    // Use the frame to create a container with the right background
-    frame.show(ui, |ui| {
-        ui.horizontal(|ui| {
-            // Extract relevance for display
-            let relevance = item.metadata.get("relevance")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            
-            // Format relevance as percentage
-            let relevance_text = format!("({:.0}%)", relevance * 100.0);
-            
-            // Display bullet and description with appropriate color
-            let text_color = if is_focused { egui::Color32::BLACK } else { ui.visuals().text_color() };
-            ui.label(egui::RichText::new("• ").color(text_color));
-            ui.label(egui::RichText::new(&item.description).color(text_color));
-            
-            // Add flexible space to push relevance to the right
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new(relevance_text).weak().color(text_color));
+    // Use a vertical layout for the entire item
+    ui.vertical(|ui| {
+        // Use the frame to create a container with the right background for the main row
+        frame.show(ui, |ui| {
+            ui.horizontal(|ui| {
+                // Display bullet point
+                ui.label(egui::RichText::new("• ").color(text_color));
+                
+                // Display the description
+                ui.label(egui::RichText::new(&item.description).color(text_color));
+                
+                // Extract relevance for display
+                let relevance = item.metadata.get("relevance")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                
+                // Format relevance as percentage
+                let relevance_text = format!("({:.0}%)", relevance * 100.0);
+                
+                // Add flexible space to push relevance to the right
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new(relevance_text).weak().color(text_color));
+                    
+                    // Add a small indicator for expanded state
+                    // TODO: Fix down arrow icon not rendering correctly in egui
+                    let expand_indicator = if is_expanded { "" } else { "▶" };
+                    ui.label(egui::RichText::new(expand_indicator).weak().color(text_color));
+                });
             });
         });
+        
+        // If expanded, show metadata
+        if is_expanded {
+            ui.indent("metadata", |ui| {
+                // Create a slightly indented area with a subtle background
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 20))
+                    .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
+                    .show(ui, |ui| {
+                        // Display metadata as key-value pairs
+                        if let serde_json::Value::Object(map) = &item.metadata {
+                            for (key, value) in map {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(format!("{}:", key)).strong());
+                                    ui.label(format!("{}", value));
+                                });
+                            }
+                        } else {
+                            ui.label("No metadata available");
+                        }
+                        
+                        // Also show the item ID
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("ID:").strong());
+                            ui.label(&item.id);
+                        });
+                    });
+            });
+        }
     });
 }
 

@@ -457,22 +457,39 @@ impl eframe::App for GuiApp {
                 // Ensure all UI elements respect the available width
                 ui.set_max_width(available_width);
                 
-                // Tasks area (takes most of the space)
-                self.render_tasks(ui);
+                // Create a split layout for the main content and the genius feed
+                egui::TopBottomPanel::top("main_content").show_inside(ui, |ui| {
+                    // Tasks area (takes most of the space)
+                    self.render_tasks(ui);
+                    
+                    ui.separator();
+                    
+                    // Activity log
+                    self.render_activity_log(ui);
+                    
+                    // Help text
+                    self.render_help(ui);
+                    
+                    // Input field at the bottom
+                    self.render_input(ui);
+                });
                 
-                ui.separator();
-                
-                // Activity log
-                self.render_activity_log(ui);
-                
-                // Help text
-                self.render_help(ui);
-                
-                // Input field at the bottom
-                self.render_input(ui);
-                
-                // Genius feed displayed underneath the input field
-                self.render_genius_feed(ui);
+                // Genius feed displayed in the remaining space
+                if self.app.app_mode == AppMode::Feed {
+                    // In Feed mode, give the genius feed more space
+                    ui.allocate_space(egui::Vec2::new(0.0, 10.0)); // Small spacing
+                    let available_height = ui.available_height();
+                    egui::Frame::none()
+                        .fill(ui.visuals().extreme_bg_color)
+                        .show(ui, |ui| {
+                            ui.set_min_height(available_height.max(200.0));
+                            self.render_genius_feed(ui);
+                        });
+                } else {
+                    // In PKM mode, show a smaller version
+                    ui.allocate_space(egui::Vec2::new(0.0, 10.0)); // Small spacing
+                    self.render_genius_feed(ui);
+                }
             });
         });
         

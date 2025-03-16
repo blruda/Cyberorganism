@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![allow(unused_imports)]
 
 use super::genius_api::{GeniusApiClient, GeniusApiError, GeniusResponse, GeniusItem};
 use crate::App;

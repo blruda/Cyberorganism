@@ -3,6 +3,8 @@
 //! This module provides integration with the Genius Platform API,
 //! allowing the application to query the API and display results.
 
+#![allow(dead_code)]
+
 pub mod genius_api;
 pub mod genius_api_bridge;
 pub mod genius_keyhandler;

@@ -146,15 +146,19 @@ impl GuiApp {
                     task_to_complete = Some(task_id);
                 }
                 
-                // Render the task text with the appropriate style
+                // Render the task text with the appropriate style and ensure it wraps
                 let text = if should_highlight {
                     egui::RichText::new(task_text).color(egui::Color32::BLACK)
                 } else {
                     egui::RichText::new(task_text)
                 };
                 
-                ui.label(text)
-            })
+                // Use a label with wrapping to ensure text stays within bounds
+                ui.add(
+                    egui::Label::new(text)
+                        .wrap(true) // Enable text wrapping
+                );
+            }).response
         }).response;
         
         (response, task_to_complete)
@@ -310,9 +314,11 @@ impl GuiApp {
             egui::Frame::none()
                 .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(message);
-                    });
+                    // Use a label with explicit wrapping to ensure text stays within bounds
+                    ui.add(
+                        egui::Label::new(message)
+                            .wrap(true) // Enable text wrapping
+                    );
                 });
         }
     }
@@ -324,10 +330,14 @@ impl GuiApp {
             egui::Frame::none()
                 .inner_margin(egui::style::Margin::symmetric(8.0, 4.0))
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Help: Enter = execute | Shift+Enter = subtask | Ctrl+Enter = toggle done | Ctrl+Up/Down = expand/collapse | Shift+Tab = switch mode")
-                            .color(ACCENT_COLOR));
-                    });
+                    // Use a label with explicit wrapping to ensure text stays within bounds
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new("Help: Enter = execute | Shift+Enter = subtask | Ctrl+Enter = toggle done | Ctrl+Up/Down = expand/collapse | Ctrl+Space = switch mode")
+                                .color(ACCENT_COLOR)
+                        )
+                        .wrap(true) // Enable text wrapping
+                    );
                 });
         }
     }
@@ -353,7 +363,7 @@ impl GuiApp {
                     
                     // Use a custom text edit with a visible background
                     let text_edit = egui::TextEdit::singleline(&mut self.input_text)
-                        .desired_width(f32::INFINITY) // Make it take full width
+                        .desired_width(ui.available_width()) // Make it take full available width
                         .hint_text(if let AppMode::Feed = self.app.app_mode {
                             "Enter search query for Genius Feed..."
                         } else {
@@ -439,8 +449,14 @@ impl eframe::App for GuiApp {
         frame.stroke = egui::Stroke::new(1.0, ACCENT_COLOR.linear_multiply(0.5));
         
         egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
-            // Use a vertical layout
+            // Set a max width for all content to ensure it stays within bounds
+            let available_width = ui.available_width();
+            
+            // Use a vertical layout with constrained width
             ui.vertical(|ui| {
+                // Ensure all UI elements respect the available width
+                ui.set_max_width(available_width);
+                
                 // Tasks area (takes most of the space)
                 self.render_tasks(ui);
                 

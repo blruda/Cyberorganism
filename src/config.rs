@@ -2,6 +2,8 @@
 //! 
 //! This module provides functionality for loading and accessing configuration
 //! settings from various sources, including config files and environment variables.
+//! 
+#![allow(dead_code)]
 
 use config::{Config, ConfigError, File};
 use directories::ProjectDirs;

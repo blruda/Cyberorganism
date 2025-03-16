@@ -106,9 +106,6 @@ impl std::error::Error for AppError {}
 /// Runs the application, loading the initial state from disk if available,
 /// and starting the GUI.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize configuration
-    config::init();
-    
     // Create app state
     let mut app = App::new();
 
@@ -119,8 +116,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.display_container_state.update_display_order(&app.tasks);
     }
 
-    // Initialize the Genius API with configuration
-    initialize_genius_api();
+    // Initialize the Genius API from environment variables
+    if genius_platform::initialize_from_env() {
+        println!("Genius API initialized from environment variables");
+    } else {
+        println!("Genius API not configured. Set GENIUS_API_KEY and GENIUS_ORGANIZATION_ID environment variables to enable API integration.");
+        // You could also load from a config file here as a fallback
+    }
 
     // Run the GUI application
     if let Err(e) = gui::run_app(app) {
@@ -129,30 +131,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
-}
-
-/// Initialize the Genius API with configuration from config files
-fn initialize_genius_api() {
-    let config = config::get_config();
-    let mut api_bridge = genius_platform::get_api_bridge();
-    
-    // Configure the API bridge with settings from config
-    api_bridge.configure(
-        config.genius.base_url.clone(),
-        config.genius.api_key.clone(),
-        config.genius.timeout_secs,
-    );
-    
-    // Log API configuration status
-    if let Some(key) = &config.genius.api_key {
-        if !key.trim().is_empty() {
-            println!("Genius API configured with API key");
-        } else {
-            println!("Genius API configured to use mock data (empty API key provided)");
-        }
-    } else {
-        println!("Genius API configured to use mock data (no API key provided)");
-    }
 }
 
 // Note: The run_app function has been moved to the gui module

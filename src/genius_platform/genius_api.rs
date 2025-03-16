@@ -1,6 +1,35 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+//! Genius API client implementation
+//!
+//! # Schema Update Instructions
+//!
+//! When the actual Genius API schema becomes available, the following components
+//! in this file will need to be updated:
+//!
+//! 1. **Data Structures**:
+//!    - Update `GeniusItem` struct to match the actual response item format
+//!    - Update `GeniusResponse` struct to match the actual response envelope
+//!    - Add any additional data structures needed for the API
+//!
+//! 2. **Request Construction**:
+//!    - In the `query_sync` method, update the request body JSON (around line 125)
+//!    - Ensure all required fields are included in the request
+//!    - Update headers if needed (currently using Bearer token authentication)
+//!
+//! 3. **Response Parsing**:
+//!    - Ensure the response parsing logic correctly handles the actual API format
+//!    - Update error handling for any API-specific error responses
+//!
+//! 4. **Mock Data**:
+//!    - Update the `mock_query` method to return data that matches the structure
+//!      of the real API responses for testing purposes
+//!
+//! The rest of the application interacts with this API through the `GeniusApiBridge`,
+//! so changes should be contained to this file and won't affect other parts of the
+//! application as long as the public interface remains consistent.
+
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::time::Duration;
@@ -82,10 +111,76 @@ impl GeniusApiClient {
         }
     }
 
+    /// Get the base URL for the API
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// Get the timeout duration
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
     /// Query the API synchronously
     pub fn query_sync(&self, input: &str) -> Result<GeniusResponse, GeniusApiError> {
-        // For now, just return a mock response
-        Ok(self.mock_query(input))
+        // When mock-api feature is explicitly enabled, always use mock data
+        #[cfg(feature = "mock-api")]
+        {
+            return Ok(self.mock_query(input));
+        }
+
+        // In normal mode, try to use real API but fall back to mock if no API key
+        #[cfg(not(feature = "mock-api"))]
+        {
+            // If no API key is provided or it's empty, fall back to mock data
+            if self.api_key.is_none() || self.api_key.as_ref().map_or(true, |k| k.trim().is_empty()) {
+                return Ok(self.mock_query(input));
+            }
+            
+            // API key is available, proceed with real API request
+            let api_key = self.api_key.as_ref().unwrap();
+            
+            // Build the request URL
+            let url = format!("{}/query", self.base_url);
+            
+            // Create the request client with timeout
+            let client = match reqwest::blocking::Client::builder()
+                .timeout(self.timeout)
+                .build() {
+                    Ok(client) => client,
+                    Err(e) => return Err(GeniusApiError::NetworkError(e.to_string())),
+                };
+            
+            // Prepare the request body
+            let request_body = serde_json::json!({
+                "query": input,
+                "max_results": 10
+            });
+            
+            // Execute the request
+            let response = match client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send() {
+                    Ok(resp) => resp,
+                    Err(e) => return Err(GeniusApiError::NetworkError(e.to_string())),
+                };
+            
+            // Check the response status
+            if !response.status().is_success() {
+                return Err(GeniusApiError::ApiError(
+                    format!("API returned error status: {}", response.status())
+                ));
+            }
+            
+            // Parse the response body
+            match response.json::<GeniusResponse>() {
+                Ok(parsed) => Ok(parsed),
+                Err(e) => Err(GeniusApiError::ParseError(e.to_string())),
+            }
+        }
     }
     
     /// Create a mock response for testing and development
@@ -118,9 +213,65 @@ impl GeniusApiClient {
 
     /// Query the API asynchronously
     pub async fn query(&self, input: &str) -> Result<GeniusResponse, GeniusApiError> {
-        // TODO: Implement actual API request
-        // For now, just return a mock response
-        Ok(self.mock_query(input))
+        // When mock-api feature is explicitly enabled, always use mock data
+        #[cfg(feature = "mock-api")]
+        {
+            return Ok(self.mock_query(input));
+        }
+
+        // In normal mode, try to use real API but fall back to mock if no API key
+        #[cfg(not(feature = "mock-api"))]
+        {
+            // If no API key is provided or it's empty, fall back to mock data
+            if self.api_key.is_none() || self.api_key.as_ref().map_or(true, |k| k.trim().is_empty()) {
+                return Ok(self.mock_query(input));
+            }
+            
+            // API key is available, proceed with real API request
+            let api_key = self.api_key.as_ref().unwrap();
+            
+            // Build the request URL
+            let url = format!("{}/query", self.base_url);
+            
+            // Create the request client with timeout
+            let client = match reqwest::Client::builder()
+                .timeout(self.timeout)
+                .build() {
+                    Ok(client) => client,
+                    Err(e) => return Err(GeniusApiError::NetworkError(e.to_string())),
+                };
+            
+            // Prepare the request body
+            let request_body = serde_json::json!({
+                "query": input,
+                "max_results": 10
+            });
+            
+            // Execute the request
+            let response = match client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
+                .await {
+                    Ok(resp) => resp,
+                    Err(e) => return Err(GeniusApiError::NetworkError(e.to_string())),
+                };
+            
+            // Check the response status
+            if !response.status().is_success() {
+                return Err(GeniusApiError::ApiError(
+                    format!("API returned error status: {}", response.status())
+                ));
+            }
+            
+            // Parse the response body
+            match response.json::<GeniusResponse>().await {
+                Ok(parsed) => Ok(parsed),
+                Err(e) => Err(GeniusApiError::ParseError(e.to_string())),
+            }
+        }
     }
 }
 

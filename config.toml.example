@@ -1,0 +1,13 @@
+# Cyberorganism Configuration Example
+# Copy this file to config.toml and fill in your values
+
+[genius]
+# API key for the Genius Platform
+# Uncomment and replace with your actual API key
+# api_key = "your-api-key-here"
+
+# Base URL for the Genius API (optional, defaults to https://api.genius.example.com)
+# base_url = "https://api.genius.example.com"
+
+# Timeout in seconds for API requests (optional, defaults to 10)
+# timeout_secs = 10

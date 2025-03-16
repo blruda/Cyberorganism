@@ -1,14 +1,69 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use super::genius_api::{GeniusApiClient, GeniusApiError, GeniusResponse, GeniusItem};
+use super::genius_api::{GeniusApiClient, GeniusApiError, GeniusResponse};
 use crate::App;
-use serde_json;
+use std::time::Duration;
 
 /// Bridge between the application UI and the Genius API
 /// 
 /// This module handles the communication between the application components
 /// and the API, ensuring that data flows correctly in both directions.
+///
+/// # API Schema (PLACEHOLDER)
+///
+/// IMPORTANT: The schema below is a hypothetical example and MUST be replaced
+/// with the actual schema when it becomes available. This is only a placeholder
+/// to illustrate the expected structure.
+///
+/// ## Example Request Format (TO BE REPLACED)
+/// ```json
+/// {
+///   "query": "User input text",
+///   "max_results": 5,
+///   "filters": {
+///     "type": "suggestion",
+///     "min_relevance": 0.5
+///   }
+/// }
+/// ```
+///
+/// ## Example Response Format (TO BE REPLACED)
+/// ```json
+/// {
+///   "status": "success",
+///   "items": [
+///     {
+///       "id": "item-123",
+///       "description": "A suggestion from the Genius API",
+///       "metadata": {
+///         "relevance": 0.95,
+///         "source": "knowledge-base",
+///         "category": "suggestion"
+///       }
+///     },
+///     {
+///       "id": "item-456",
+///       "description": "Another suggestion from the API",
+///       "metadata": {
+///         "relevance": 0.82,
+///         "source": "web-search",
+///         "category": "fact"
+///       }
+///     }
+///   ]
+/// }
+/// ```
+///
+/// # Integration Notes
+///
+/// This bridge is the primary interface between the application and the Genius API.
+/// All API communication should go through this bridge to ensure proper isolation.
+/// 
+/// TODO: When the actual JSON schema is finalized, update:
+/// 1. This documentation with the correct request/response formats
+/// 2. The GeniusApiClient in genius_api.rs to match the schema
+/// 3. Ensure the bridge methods properly transform data between the app and API
 pub struct GeniusApiBridge {
     /// The API client used to make requests
     api_client: GeniusApiClient,
@@ -35,6 +90,24 @@ impl GeniusApiBridge {
             last_response: None,
             request_in_progress: false,
         }
+    }
+
+    /// Configure the API client with the given settings
+    pub fn configure(&mut self, base_url: String, api_key: Option<String>, timeout_secs: u64) {
+        self.api_client = GeniusApiClient::with_config(
+            base_url,
+            api_key,
+            Duration::from_secs(timeout_secs),
+        );
+    }
+
+    /// Set the API key for the client
+    pub fn set_api_key(&mut self, api_key: String) {
+        self.api_client = GeniusApiClient::with_config(
+            self.api_client.base_url().to_string(),
+            Some(api_key),
+            self.api_client.timeout(),
+        );
     }
 
     /// Get the input query from the application state
@@ -70,52 +143,21 @@ impl GeniusApiBridge {
         // Mark that a request is in progress
         self.request_in_progress = true;
         
-        // In debug mode, simulate API request with dummy data
-        #[cfg(debug_assertions)]
-        {
-            // Create dummy items with incrementing relevance
-            let mut items = Vec::new();
-            for i in 1..=8 {
-                let item = GeniusItem {
-                    id: format!("item-{}", i),
-                    description: format!("Result for '{}' - Item {}", query, i),
-                    metadata: {
-                        let mut map = serde_json::Map::new();
-                        // Relevance from 0.1 to 0.8 (incrementing by 0.1)
-                        map.insert(
-                            "relevance".to_string(), 
-                            serde_json::Value::Number(serde_json::Number::from_f64(i as f64 * 0.1).unwrap())
-                        );
-                        serde_json::Value::Object(map)
-                    },
-                };
-                items.push(item);
+        // Execute the query using the API client
+        let result = self.api_client.query_sync(query);
+        
+        // Update state based on the result
+        match &result {
+            Ok(response) => {
+                self.last_response = Some(response.clone());
+                self.request_in_progress = false;
+            },
+            Err(_) => {
+                self.request_in_progress = false;
             }
-            
-            // Create a dummy response
-            let response = GeniusResponse {
-                items,
-                status: "success".to_string(),
-            };
-            
-            // Store the response and mark request as complete
-            self.last_response = Some(response.clone());
-            self.request_in_progress = false;
-            
-            return Ok(response);
         }
         
-        // In release mode, use the actual API client
-        #[cfg(not(debug_assertions))]
-        {
-            // TODO: Implement actual API request
-            // For now, just return a mock response
-            let response = self.api_client.mock_query(query);
-            self.last_response = Some(response.clone());
-            self.request_in_progress = false;
-            
-            Ok(response)
-        }
+        result
     }
 
     /// Get the descriptions from the last API response
